@@ -1,7 +1,15 @@
 import type { NextConfig } from "next";
 
+// En GitHub Pages la app vive bajo /<repo>/; en `next dev` debe ser '' o `/` da 404.
+const repoBase =
+  process.env.GITHUB_PAGES_BASE_PATH ?? "/nombre-de-tu-repositorio";
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: "export", // Genera la carpeta /out con HTML/CSS/JS estáticos
+  basePath: process.env.NODE_ENV === "production" ? repoBase : "",
+  images: {
+    unoptimized: true, // GitHub Pages no soporta la optimización de imágenes nativa de Next.js
+  },
 };
 
 export default nextConfig;
