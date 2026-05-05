@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 // En GitHub Pages la app vive bajo /<repo>/; en `next dev` debe ser '' o `/` da 404.
 const repoBase =
-  process.env.GITHUB_PAGES_BASE_PATH ?? "/cv/my-3d-portfolio";
+  process.env.GITHUB_PAGES_BASE_PATH ?? "/cv";
 
 const nextConfig: NextConfig = {
   output: "export", // Genera la carpeta /out con HTML/CSS/JS estáticos
