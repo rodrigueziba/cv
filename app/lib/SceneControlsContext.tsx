@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_SCENE_COLORS, type SceneColorKey } from '@/app/lib/sceneConfig';
 
 export type AudioSourceMode = 'file' | 'tone' | 'arpeggio';
@@ -29,17 +29,27 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
   const [audioSourceMode, setAudioSourceMode] = useState<AudioSourceMode>('tone');
   const [toneFrequencyHz, setToneFrequencyHz] = useState(220);
   const [arpeggioMode, setArpeggioMode] = useState<ArpeggioMode>('minor');
-  const [uploadedFile, setUploadedFileState] = useState<File | null>(null);
-  const uploadedFileUrl = useMemo(
-    () => (uploadedFile ? URL.createObjectURL(uploadedFile) : null),
-    [uploadedFile]
-  );
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
+  // Mirrors uploadedFileUrl so the unmount-only cleanup effect below can read
+  // the latest value without needing uploadedFileUrl in its dependency array.
+  const uploadedFileUrlRef = useRef<string | null>(null);
 
-  // Revoke the previous object URL once it's no longer in use (file changed or unmounted).
+  const setUploadedFile = (file: File | null) => {
+    setUploadedFileUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      const next = file ? URL.createObjectURL(file) : null;
+      uploadedFileUrlRef.current = next;
+      return next;
+    });
+  };
+
+  // Unmount-only cleanup: revoke whatever URL is current when the provider unmounts.
+  // Per-selection revoke is already handled synchronously in setUploadedFile above.
   useEffect(() => {
-    if (!uploadedFileUrl) return;
-    return () => URL.revokeObjectURL(uploadedFileUrl);
-  }, [uploadedFileUrl]);
+    return () => {
+      if (uploadedFileUrlRef.current) URL.revokeObjectURL(uploadedFileUrlRef.current);
+    };
+  }, []);
 
   const value = useMemo<SceneControlsValue>(
     () => ({
@@ -53,7 +63,7 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
       arpeggioMode,
       setArpeggioMode,
       uploadedFileUrl,
-      setUploadedFile: setUploadedFileState,
+      setUploadedFile,
     }),
     [colors, audioSourceMode, toneFrequencyHz, arpeggioMode, uploadedFileUrl]
   );
