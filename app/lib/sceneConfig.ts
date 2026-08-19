@@ -278,7 +278,7 @@ export const CORRIDOR_CONFIG = {
   patternColorB: '#6b2a55',
   solidColor: '#0a0a14', // floor/ceiling/side-walls color past the patterned portion
   // End-wall red→blue colors are NOT duplicated here — they live in
-  // DEFAULT_SCENE_COLORS.corridorWallStart/End below, the single
+  // DEFAULT_SCENE_COLORS.corridorWallStart/End above, the single
   // source of truth the debug menu's color pickers also read/write.
   finalLinkText: 'IR A LA SIMULACION',
   finalLinkUrl: 'https://efectodoppler.vercel.app',
