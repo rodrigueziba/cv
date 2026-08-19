@@ -7,6 +7,10 @@ const repoBase =
 const nextConfig: NextConfig = {
   output: "export", // Genera la carpeta /out con HTML/CSS/JS estáticos
   basePath: process.env.NODE_ENV === "production" ? repoBase : "",
+  env: {
+    // Mirrors basePath so client code (audio/asset URLs) can prefix correctly.
+    NEXT_PUBLIC_BASE_PATH: process.env.NODE_ENV === "production" ? repoBase : "",
+  },
   images: {
     unoptimized: true, // GitHub Pages no soporta la optimización de imágenes nativa de Next.js
   },
