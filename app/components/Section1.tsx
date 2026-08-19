@@ -20,7 +20,16 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { HASH_NOISE_FBM_GLSL, HSV2RGB_GLSL } from '@/app/lib/shaders/common';
-import { TITLE_CONFIG, shadowToCss } from '@/app/lib/sceneConfig';
+import {
+  TITLE_CONFIG,
+  shadowToCss,
+  TEXT_BLOCKS,
+  INTRO_CAMERA_INSTANCES,
+  FINAL_PHASE_START_INSTANCE,
+  FINAL_PHASE_DURATION_INSTANCES,
+} from '@/app/lib/sceneConfig';
+import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
+import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTimeline';
 
 /* ═══════════════════════════════════════════════════════════════
    SHADERS
@@ -266,6 +275,8 @@ export default function Section1() {
   const titleRef      = useRef<HTMLDivElement>(null);
   const scrollRef     = useRef(0);
   const mouseRef      = useRef({ x: 0, y: 0 });
+  const textBlockRefs = useRef<HTMLDivElement[]>([]);
+  const scrollInstanceRef = useRef(0); // raw scroll timeline position, in "instances"
 
   useEffect(() => {
     if (!mountRef.current || !containerRef.current) return;
@@ -502,16 +513,26 @@ export default function Section1() {
         );
       }
 
+      /* Scroll-timed text block opacity (imperative — avoids per-frame re-render) */
+      const instance = scrollInstanceRef.current;
+      TEXT_BLOCKS.forEach((block, i) => {
+        const el = textBlockRefs.current[i];
+        if (el) el.style.opacity = String(computeBlockOpacity(instance, block.startInstance));
+      });
+
       composer.render();
     }
 
     animate();
 
     function onScroll() {
-      const totalH = container.offsetHeight - window.innerHeight;
-      if (totalH <= 0) return;
       const scrolled = window.scrollY - container.offsetTop;
-      scrollRef.current = Math.max(0, Math.min(1, scrolled / totalH));
+      const instance = computeScrollInstance(Math.max(0, scrolled), window.innerHeight);
+      scrollInstanceRef.current = instance;
+      // Camera choreography progress: 0..1 over the first INTRO_CAMERA_INSTANCES,
+      // then held at 1 (matches the existing "fixed camera" final look) until
+      // the final zoom phase (a later task) takes over.
+      scrollRef.current = Math.max(0, Math.min(1, instance / INTRO_CAMERA_INSTANCES));
     }
 
     function onMouse(e: MouseEvent) {
@@ -556,16 +577,22 @@ export default function Section1() {
     };
   }, []);
 
+  /* Scroll runway size — enough for the intro, all 5 text blocks, and the
+   * final zoom/corridor phase, plus a 1-instance settle buffer at the end. */
+  const TOTAL_SCROLL_INSTANCES =
+    FINAL_PHASE_START_INSTANCE + FINAL_PHASE_DURATION_INSTANCES + 1;
+
   /* ── JSX ──────────────────────────────────────────────────────── */
   return (
     /*
-     * The outer div is 400 vh tall — the "scroll runway" for the section.
-     * Inside it a sticky viewport hosts both the Three.js canvas and the
-     * overlay UI, so the experience is fully contained within the section.
+     * The outer div's height is derived from TOTAL_SCROLL_INSTANCES — the
+     * "scroll runway" for the section. Inside it a sticky viewport hosts
+     * both the Three.js canvas and the overlay UI, so the experience is
+     * fully contained within the section.
      */
     <div
       ref={containerRef}
-      style={{ position: 'relative', height: '400vh' }}
+      style={{ position: 'relative', height: `${(TOTAL_SCROLL_INSTANCES + 1) * 100}vh` }}
     >
       {/* Sticky viewport — canvas + UI overlay stay pinned while scrolling */}
       <div
@@ -581,6 +608,9 @@ export default function Section1() {
           ref={mountRef}
           style={{ position: 'absolute', inset: 0 }}
         />
+
+        {/* ── Scroll-timed text blocks — see app/lib/sceneConfig.ts TEXT_BLOCKS ── */}
+        <ScrollTextBlocks ref={textBlockRefs} />
 
         {/* ── Animations ───────────────────────────────────────────── */}
         <style>{`
