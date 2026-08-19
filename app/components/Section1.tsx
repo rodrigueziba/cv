@@ -20,6 +20,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { HASH_NOISE_FBM_GLSL, HSV2RGB_GLSL } from '@/app/lib/shaders/common';
+import { TITLE_CONFIG, shadowToCss } from '@/app/lib/sceneConfig';
 
 /* ═══════════════════════════════════════════════════════════════
    SHADERS
@@ -506,33 +507,6 @@ export default function Section1() {
 
     animate();
 
-    /* ── Title text fusion effects — random every 5s ─────────────────
-     * Only active during Phase 0 (progress < 0.25).
-     * Each effect is a short CSS class swap that triggers a keyframe.   */
-    const TEXT_EFFECTS = [
-      'fx-glitch',       // chromatic split + shake
-      'fx-wave',         // letter wave distortion
-      'fx-flicker',      // rapid opacity flicker
-      'fx-scanline',     // horizontal scan line pass
-      'fx-dissolve',     // pixelated dissolve in/out
-      'fx-neon',         // neon color pulse surge
-    ] as const;
-    let textFxIdx = -1;
-    const textFxInterval = setInterval(() => {
-      if (!titleRef.current) return;
-      if (scrollRef.current > 0.20) return;   // stop when scrolled past Phase 0
-      // Remove any existing fx class
-      TEXT_EFFECTS.forEach(fx => titleRef.current!.classList.remove(fx));
-      // Pick a different random effect each time
-      let next = textFxIdx;
-      while (next === textFxIdx) next = Math.floor(Math.random() * TEXT_EFFECTS.length);
-      textFxIdx = next;
-      titleRef.current.classList.add(TEXT_EFFECTS[next]);
-      // Auto-remove after animation completes (1.2 s)
-      setTimeout(() => {
-        titleRef.current?.classList.remove(TEXT_EFFECTS[next]);
-      }, 1400);
-    }, 5000);
     function onScroll() {
       const totalH = container.offsetHeight - window.innerHeight;
       if (totalH <= 0) return;
@@ -570,7 +544,6 @@ export default function Section1() {
 
     return () => {
       cancelAnimationFrame(rafId);
-      clearInterval(textFxInterval);
       window.removeEventListener('scroll',    onScroll);
       window.removeEventListener('mousemove', onMouse);
       window.removeEventListener('touchmove', onTouch);
@@ -609,10 +582,8 @@ export default function Section1() {
           style={{ position: 'absolute', inset: 0 }}
         />
 
-        {/* ── Google Font + animations ────────────────────────────── */}
+        {/* ── Animations ───────────────────────────────────────────── */}
         <style>{`
-          @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
-
           @keyframes currentsArrow {
             0%, 100% { transform: translateY(0px); opacity: 0.55; }
             50%       { transform: translateY(7px); opacity: 0.90; }
@@ -621,96 +592,32 @@ export default function Section1() {
             0%, 100% { opacity: 0.72; }
             50%       { opacity: 0.96; }
           }
-
-          /* ── Text fusion effects ── */
-
-          /* 1. Glitch: chromatic offset + shake */
-          @keyframes kGlitch {
-            0%   { text-shadow: 0 0 40px rgba(225,190,75,.4), -3px 0 0 rgba(255,0,100,.7), 3px 0 0 rgba(0,200,255,.7); transform: translateX(-50%) translateX(-2px); }
-            15%  { text-shadow: 0 0 40px rgba(225,190,75,.4),  4px 0 0 rgba(255,0,100,.7),-4px 0 0 rgba(0,200,255,.7); transform: translateX(-50%) translateX(2px); }
-            30%  { text-shadow: 0 0 40px rgba(225,190,75,.4), -2px 0 0 rgba(255,0,100,.7), 2px 0 0 rgba(0,200,255,.7); transform: translateX(-50%) translateX(0px); }
-            45%  { text-shadow: 0 0 40px rgba(225,190,75,.4),  5px 0 0 rgba(255,0,100,.7),-5px 0 0 rgba(0,200,255,.7); transform: translateX(-50%) translateX(-3px); }
-            60%  { text-shadow: 0 0 40px rgba(225,190,75,.4),  0px 0 0 rgba(255,0,100,.7), 0px 0 0 rgba(0,200,255,.7); transform: translateX(-50%) translateX(0px); }
-            100% { text-shadow: 0 0 40px rgba(225,190,75,.4),  0px 0 0 rgba(255,0,100,.0), 0px 0 0 rgba(0,200,255,.0); transform: translateX(-50%); }
-          }
-          .fx-glitch { animation: kGlitch 1.2s ease-out forwards !important; }
-
-          /* 2. Wave: vertical sine motion */
-          @keyframes kWave {
-            0%   { letter-spacing: 0.30em; transform: translateX(-50%) skewX(0deg); }
-            20%  { letter-spacing: 0.42em; transform: translateX(-50%) skewX(-4deg); }
-            50%  { letter-spacing: 0.22em; transform: translateX(-50%) skewX(4deg); }
-            80%  { letter-spacing: 0.38em; transform: translateX(-50%) skewX(-2deg); }
-            100% { letter-spacing: 0.30em; transform: translateX(-50%) skewX(0deg); }
-          }
-          .fx-wave { animation: kWave 1.3s ease-in-out forwards !important; }
-
-          /* 3. Flicker: rapid opacity bursts */
-          @keyframes kFlicker {
-            0%,100%{ opacity: 0.85; }
-            10%    { opacity: 0.10; }
-            20%    { opacity: 0.90; }
-            30%    { opacity: 0.05; }
-            40%    { opacity: 0.95; }
-            50%    { opacity: 0.20; }
-            60%    { opacity: 0.88; }
-            70%    { opacity: 0.02; }
-            80%    { opacity: 0.92; }
-            90%    { opacity: 0.40; }
-          }
-          .fx-flicker { animation: kFlicker 1.0s steps(1) forwards !important; }
-
-          /* 4. Scan line: bright horizontal bar sweeps down */
-          @keyframes kScan {
-            0%   { text-shadow: 0 0 40px rgba(225,190,75,.4), 0 -60px 12px rgba(255,255,255,.9); }
-            50%  { text-shadow: 0 0 40px rgba(225,190,75,.4), 0   0px 16px rgba(255,255,255,.6); }
-            100% { text-shadow: 0 0 40px rgba(225,190,75,.4), 0  60px 12px rgba(255,255,255,.0); }
-          }
-          .fx-scanline { animation: kScan 1.2s ease-in-out forwards !important; }
-
-          /* 5. Dissolve: blur in then out */
-          @keyframes kDissolve {
-            0%   { filter: blur(0px)   opacity(0.85); transform: translateX(-50%) scale(1.00); }
-            30%  { filter: blur(12px)  opacity(0.20); transform: translateX(-50%) scale(1.05); }
-            60%  { filter: blur(14px)  opacity(0.15); transform: translateX(-50%) scale(0.96); }
-            100% { filter: blur(0px)   opacity(0.85); transform: translateX(-50%) scale(1.00); }
-          }
-          .fx-dissolve { animation: kDissolve 1.4s ease-in-out forwards !important; }
-
-          /* 6. Neon: color shift to vivid pink then back to gold */
-          @keyframes kNeon {
-            0%   { color: rgba(225,190,75,0.85); text-shadow: 0 0 40px rgba(225,190,75,.4); }
-            25%  { color: rgba(255, 50,200,1.00); text-shadow: 0 0 30px rgba(255,50,200,.8), 0 0 60px rgba(255,50,200,.4); }
-            60%  { color: rgba(100,240,255,1.00); text-shadow: 0 0 30px rgba(100,240,255,.8),0 0 60px rgba(100,240,255,.4); }
-            100% { color: rgba(225,190,75,0.85); text-shadow: 0 0 40px rgba(225,190,75,.4); }
-          }
-          .fx-neon { animation: kNeon 1.3s ease-in-out forwards !important; }
         `}</style>
 
-        {/* ── Hero title in the sky ───────────────────────────────── */}
+        {/* ── Hero title — see app/lib/sceneConfig.ts TITLE_CONFIG to restyle ── */}
         <div
           ref={titleRef}
           style={{
             position:      'absolute',
-            top:           '17%',
+            top:           TITLE_CONFIG.topPosition,
             left:          '50%',
             transform:     'translateX(-50%)',
             zIndex:        10,
-            textAlign:     'center',
+            textAlign:     TITLE_CONFIG.textAlign,
             whiteSpace:    'nowrap',
-            color:         'rgba(225, 190, 75, 0.85)',
-            fontFamily:    '"Bebas Neue", "Arial Narrow", Impact, sans-serif',
-            fontSize:      'clamp(20px, 3.0vw, 50px)',
+            color:         TITLE_CONFIG.color,
+            fontFamily:    'var(--font-michroma), "Arial Narrow", Impact, sans-serif',
+            fontSize:      TITLE_CONFIG.fontSizeClamp,
             fontWeight:    400,
-            letterSpacing: '0.30em',
+            letterSpacing: TITLE_CONFIG.letterSpacing,
             textTransform: 'uppercase',
             userSelect:    'none',
             pointerEvents: 'none',
             animation:     'titlePulse 4s ease-in-out infinite',
-            textShadow:    '0 0 40px rgba(225, 190, 75, 0.40), 0 0 80px rgba(225, 190, 75, 0.18)',
+            textShadow:    shadowToCss(TITLE_CONFIG.shadow),
           }}
         >
-          PENSANDO LAS COSAS DIFERENTE
+          {TITLE_CONFIG.text}
         </div>
 
         {/* ── Scroll indicator ───────────────────────────────────── */}
