@@ -35,12 +35,10 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
   const uploadedFileUrlRef = useRef<string | null>(null);
 
   const setUploadedFile = (file: File | null) => {
-    setUploadedFileUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      const next = file ? URL.createObjectURL(file) : null;
-      uploadedFileUrlRef.current = next;
-      return next;
-    });
+    if (uploadedFileUrlRef.current) URL.revokeObjectURL(uploadedFileUrlRef.current);
+    const next = file ? URL.createObjectURL(file) : null;
+    uploadedFileUrlRef.current = next;
+    setUploadedFileUrl(next);
   };
 
   // Unmount-only cleanup: revoke whatever URL is current when the provider unmounts.
