@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { HASH_NOISE_FBM_GLSL, HSV2RGB_GLSL } from '@/app/lib/shaders/common';
 
 /* ═══════════════════════════════════════════════════════════════
    SHADERS
@@ -30,11 +31,7 @@ const STAR_VERT = /* glsl */`
   attribute float aSize;
   varying   vec3  vColor;
   uniform   float uTime;
-
-  vec3 hsv2rgb(vec3 c) {
-    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-    return c.z * mix(K.xxx, clamp(abs(fract(c.xxx+K.xyz)*6.0-K.www)-K.xxx,0.0,1.0),c.y);
-  }
+  ${HSV2RGB_GLSL}
   void main() {
     /* Twinkling: each star has a random phase and frequency */
     float twinkle = 0.30 + 0.70 * abs(sin(uTime * (0.5 + aPhase) + aPhase * 6.28));
@@ -91,30 +88,8 @@ const FLOW_FRAG = /* glsl */`
   varying vec3 vWorldPos;
 
   /* ── Noise helpers ──────────────────────────────────────────────── */
-  float hash21(vec2 p) {
-    p  = fract(p * vec2(127.1, 311.7));
-    p += dot(p, p + 17.19);
-    return fract(p.x * p.y);
-  }
-  float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash21(i),           hash21(i+vec2(1,0)), f.x),
-               mix(hash21(i+vec2(0,1)), hash21(i+vec2(1,1)), f.x), f.y);
-  }
-  float fbm(vec2 p) {
-    float v = 0.0, a = 0.50;
-    for (int i = 0; i < 4; i++) {
-      v += a * noise(p);
-      p  = p * 2.1 + vec2(3.11, 1.73);
-      a *= 0.50;
-    }
-    return v;
-  }
-  vec3 hsv2rgb(vec3 c) {
-    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-    return c.z * mix(K.xxx, clamp(abs(fract(c.xxx+K.xyz)*6.0-K.www)-K.xxx,0.0,1.0),c.y);
-  }
+  ${HASH_NOISE_FBM_GLSL}
+  ${HSV2RGB_GLSL}
 
   void main() {
     vec2  wxz = vWorldPos.xz;
@@ -235,10 +210,7 @@ const SPH_FRAG = /* glsl */`
   varying vec3 vViewDir;
   varying vec3 vWorldPos;
 
-  vec3 hsv2rgb(vec3 c) {
-    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-    return c.z * mix(K.xxx, clamp(abs(fract(c.xxx+K.xyz)*6.0-K.www)-K.xxx, 0.0, 1.0), c.y);
-  }
+  ${HSV2RGB_GLSL}
 
   void main() {
     vec3  N   = normalize(vNormal);
