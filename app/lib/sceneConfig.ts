@@ -48,12 +48,6 @@ export const SPACE_PROMPT_CONFIG = {
   bottomPosition: '5vh',
 };
 
-/* ── TITLE AUTO-HIDE ────────────────────────────────────────────────
- * The hero title disappears this many REAL seconds after the user
- * starts scrolling (not scroll-distance-based), and only reappears
- * once scrolled back to the very top of the page. */
-export const TITLE_HIDE_DELAY_SECONDS = 5;
-
 /* ── 2) SCROLL TIMELINE UNITS ──────────────────────────────────────
  * 1 "instancia de scroll" = 1 window height (vh) of scrolling,
  * measured from the top of the Section1 container. All timings
@@ -167,6 +161,16 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
 /* Last scroll instance any block occupies — used to size the scroll runway. */
 export const LAST_TEXT_BLOCK_END_INSTANCE =
   TEXT_BLOCKS[TEXT_BLOCKS.length - 1].startInstance + TEXT_BLOCK_DURATION_INSTANCES;
+
+/* ── TITLE AUTO-HIDE ────────────────────────────────────────────────
+ * The hero title starts hiding the moment the scroll position reaches
+ * this instance — deliberately the SAME value as TEXT_BLOCKS[0]'s
+ * startInstance (not just a similar one) so the title's fade-out and
+ * the first text block's fade-in always begin at the exact same
+ * scroll position, and therefore the same moment in time regardless
+ * of how fast the user scrolls. Reappears (instantly) only once
+ * scrolled back to the very top of the page. */
+export const TITLE_HIDE_TRIGGER_INSTANCE = TEXT_BLOCKS[0].startInstance;
 
 /* ── 4) ORIGINAL CAMERA CHOREOGRAPHY WINDOW ───────────────────────
  * The pre-existing 4-keyframe camera dance (side → zenith → zoom →

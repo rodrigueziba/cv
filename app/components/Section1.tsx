@@ -35,7 +35,7 @@ import {
   FLOOR_DOPPLER_MIN_CAMERA_PROGRESS,
   CORRIDOR_CONFIG,
   SPACE_PROMPT_CONFIG,
-  TITLE_HIDE_DELAY_SECONDS,
+  TITLE_HIDE_TRIGGER_INSTANCE,
   FREE_CAMERA_CONFIG,
 } from '@/app/lib/sceneConfig';
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
@@ -330,8 +330,6 @@ export default function Section1() {
   // of the current one (same stale-closure concern colorsRef/audioSourceModeRef
   // above exist to avoid). Kept in sync at every setTitleVisible call site.
   const titleVisibleRef = useRef(true);
-  const titleHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const titleHideTimerArmedRef = useRef(false);
 
   const containerRef  = useRef<HTMLDivElement>(null);
   const mountRef      = useRef<HTMLDivElement>(null);
@@ -971,23 +969,17 @@ export default function Section1() {
       scrollRef.current = Math.max(0, Math.min(1, instance / INTRO_CAMERA_INSTANCES));
 
       if (instance <= 0.01) {
-        // Back at the very top — cancel any pending hide, show the title immediately,
-        // and disarm so the NEXT scroll-away restarts a fresh 5-second countdown.
-        if (titleHideTimerRef.current !== null) {
-          clearTimeout(titleHideTimerRef.current);
-          titleHideTimerRef.current = null;
-        }
-        titleHideTimerArmedRef.current = false;
+        // Back at the very top — show the title immediately.
         if (!titleVisibleRef.current) {
           titleVisibleRef.current = true;
           setTitleVisible(true);
         }
-      } else if (!titleHideTimerArmedRef.current) {
-        titleHideTimerArmedRef.current = true;
-        titleHideTimerRef.current = setTimeout(() => {
-          titleVisibleRef.current = false;
-          setTitleVisible(false);
-        }, TITLE_HIDE_DELAY_SECONDS * 1000);
+      } else if (instance >= TITLE_HIDE_TRIGGER_INSTANCE && titleVisibleRef.current) {
+        // Same trigger instance as TEXT_BLOCKS[0].startInstance — the title
+        // starts hiding at the exact scroll position the first text block
+        // starts appearing, so they're always in sync regardless of scroll speed.
+        titleVisibleRef.current = false;
+        setTitleVisible(false);
       }
     }
 
@@ -1035,8 +1027,6 @@ export default function Section1() {
       corridorRef.current = null;
       audioEngineRef.current?.dispose();
       audioEngineRef.current = null;
-      if (titleHideTimerRef.current !== null) clearTimeout(titleHideTimerRef.current);
-      titleHideTimerArmedRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
