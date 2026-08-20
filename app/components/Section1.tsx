@@ -27,9 +27,11 @@ import {
   INTRO_CAMERA_INSTANCES,
   FINAL_PHASE_START_INSTANCE,
   FINAL_PHASE_DURATION_INSTANCES,
+  DEFAULT_SCENE_COLORS,
 } from '@/app/lib/sceneConfig';
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
 import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTimeline';
+import { useSceneControls } from '@/app/lib/SceneControlsContext';
 
 /* ═══════════════════════════════════════════════════════════════
    SHADERS
@@ -41,6 +43,7 @@ const STAR_VERT = /* glsl */`
   attribute float aSize;
   varying   vec3  vColor;
   uniform   float uTime;
+  uniform   vec3  uStarTint;
   ${HSV2RGB_GLSL}
   void main() {
     /* Twinkling: each star has a random phase and frequency */
@@ -48,7 +51,7 @@ const STAR_VERT = /* glsl */`
     /* Slowly drifting hue — mostly white (low saturation), occasional color */
     float hue = fract(aPhase * 4.13 + uTime * 0.025);
     float sat = 0.18 + 0.40 * abs(sin(aPhase * 7.7));
-    vColor      = hsv2rgb(vec3(hue, sat, twinkle));
+    vColor      = hsv2rgb(vec3(hue, sat, twinkle)) * uStarTint;
     gl_PointSize = aSize * (0.5 + twinkle * 0.5);
     gl_Position  = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
@@ -94,6 +97,11 @@ const FLOW_FRAG = /* glsl */`
   uniform vec2  uSphereXZ;
   uniform float uSphereR;    // flow deflection radius (≈ visual sphere radius)
   uniform float uProgress;
+  uniform vec3  uBgColor;
+  uniform vec3  uLineLavender;
+  uniform vec3  uLinePink;
+  uniform vec3  uLineAmber;
+  uniform vec3  uNearGlow;
 
   varying vec3 vWorldPos;
 
@@ -143,20 +151,20 @@ const FLOW_FRAG = /* glsl */`
 
     /* ── Colour palette ──────────────────────────────────────────────── */
     /* Album: near-black deep purple bg, bright lavender/pink lines       */
-    vec3 bg = vec3(0.018, 0.004, 0.058);               /* near-black purple */
+    vec3 bg = uBgColor;                                 /* near-black purple */
 
     /* Horizontal gradient: lavender → pink → amber across world X */
     float cx     = clamp((wxz.x + 25.0) / 50.0, 0.0, 1.0);
-    vec3  cLav   = vec3(0.58, 0.40, 0.92);             /* deep lavender */
-    vec3  cPink  = vec3(0.92, 0.36, 0.75);             /* hot pink */
-    vec3  cAmber = vec3(0.90, 0.60, 0.18);             /* warm amber */
+    vec3  cLav   = uLineLavender;                       /* deep lavender */
+    vec3  cPink  = uLinePink;                            /* hot pink */
+    vec3  cAmber = uLineAmber;                           /* warm amber */
     vec3  lineCol = (cx < 0.5)
                     ? mix(cLav,  cPink,  cx * 2.0)
                     : mix(cPink, cAmber, (cx - 0.5) * 2.0);
 
     /* Near sphere: vivid hot-pink (like the album's sphere halo) */
     float nearSph = 1.0 - smoothstep(0.0, R * 2.5, r);
-    lineCol       = mix(lineCol, vec3(0.98, 0.18, 0.60), nearSph * 0.72);
+    lineCol       = mix(lineCol, uNearGlow, nearSph * 0.72);
 
     /* Phase 3: rainbow */
     vec3 rainbow = hsv2rgb(vec3(fract(cx * 1.7 + t * 0.55 + warp1 * 0.5), 0.92, 1.0));
@@ -215,6 +223,7 @@ const SPH_FRAG = /* glsl */`
 
   uniform float uProgress;
   uniform float uTime;
+  uniform vec3  uChromeHighlight;
 
   varying vec3 vNormal;
   varying vec3 vViewDir;
@@ -243,7 +252,7 @@ const SPH_FRAG = /* glsl */`
     vec3  L3   = normalize(vec3(0.0, -1.0, 0.5));
     float sp3  = pow(max(0.0, dot(reflect(-V, N), L3)), 14.0) * 0.22;
     vec3  metal = metalCol
-                + vec3(1.0, 0.98, 0.94) * sp1
+                + uChromeHighlight * sp1
                 + vec3(0.55, 0.38, 0.88) * sp2
                 + vec3(0.90, 0.52, 0.10) * sp3;
 
@@ -269,6 +278,8 @@ const SPH_FRAG = /* glsl */`
 ═══════════════════════════════════════════════════════════════ */
 
 export default function Section1() {
+  const { colors } = useSceneControls();
+
   const containerRef  = useRef<HTMLDivElement>(null);
   const mountRef      = useRef<HTMLDivElement>(null);
   const indicatorRef  = useRef<HTMLDivElement>(null);
@@ -277,6 +288,15 @@ export default function Section1() {
   const mouseRef      = useRef({ x: 0, y: 0 });
   const textBlockRefs = useRef<HTMLDivElement[]>([]);
   const scrollInstanceRef = useRef(0); // raw scroll timeline position, in "instances"
+
+  const colorsRef = useRef(colors);
+  useEffect(() => {
+    colorsRef.current = colors;
+  }, [colors]);
+
+  const flowUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
+  const sphUniformsRef  = useRef<Record<string, THREE.IUniform> | null>(null);
+  const starUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
 
   useEffect(() => {
     if (!mountRef.current || !containerRef.current) return;
@@ -318,7 +338,13 @@ export default function Section1() {
       uSphereXZ: { value: new THREE.Vector2(0, 0) },
       uSphereR:  { value: SPHERE_IR },
       uProgress: { value: 0 },
+      uBgColor:      { value: new THREE.Color(DEFAULT_SCENE_COLORS.flowBackground) },
+      uLineLavender: { value: new THREE.Color(DEFAULT_SCENE_COLORS.flowLineLavender) },
+      uLinePink:     { value: new THREE.Color(DEFAULT_SCENE_COLORS.flowLinePink) },
+      uLineAmber:    { value: new THREE.Color(DEFAULT_SCENE_COLORS.flowLineAmber) },
+      uNearGlow:     { value: new THREE.Color(DEFAULT_SCENE_COLORS.flowNearSphereGlow) },
     };
+    flowUniformsRef.current = flowUniforms;
     const flowMat  = new THREE.ShaderMaterial({
       vertexShader:   FLOW_VERT,
       fragmentShader: FLOW_FRAG,
@@ -332,7 +358,9 @@ export default function Section1() {
     const sphUniforms: Record<string, THREE.IUniform> = {
       uProgress: { value: 0 },
       uTime:     { value: 0 },
+      uChromeHighlight: { value: new THREE.Color(DEFAULT_SCENE_COLORS.sphereChromeHighlight) },
     };
+    sphUniformsRef.current = sphUniforms;
     const sphMat = new THREE.ShaderMaterial({
       vertexShader:   SPH_VERT,
       fragmentShader: SPH_FRAG,
@@ -364,7 +392,11 @@ export default function Section1() {
     starGeo.setAttribute('position', new THREE.BufferAttribute(sPosArr,   3));
     starGeo.setAttribute('aPhase',   new THREE.BufferAttribute(sPhaseArr, 1));
     starGeo.setAttribute('aSize',    new THREE.BufferAttribute(sSizeArr,  1));
-    const starUniforms: Record<string, THREE.IUniform> = { uTime: { value: 0 } };
+    const starUniforms: Record<string, THREE.IUniform> = {
+      uTime: { value: 0 },
+      uStarTint: { value: new THREE.Color(DEFAULT_SCENE_COLORS.starColor) },
+    };
+    starUniformsRef.current = starUniforms;
     const starMat = new THREE.ShaderMaterial({
       vertexShader:   STAR_VERT,
       fragmentShader: STAR_FRAG,
@@ -576,6 +608,20 @@ export default function Section1() {
       starGeo.dispose();  starMat.dispose();
     };
   }, []);
+
+  /* Push debug-menu color changes into the live shader uniforms. Runs on
+   * React's normal render/commit cycle, so it always sees the latest
+   * `colors` (unlike the rAF loop inside the mount effect above, which
+   * closes over the uniforms refs instead). */
+  useEffect(() => {
+    flowUniformsRef.current?.uBgColor.value.set(colors.flowBackground);
+    flowUniformsRef.current?.uLineLavender.value.set(colors.flowLineLavender);
+    flowUniformsRef.current?.uLinePink.value.set(colors.flowLinePink);
+    flowUniformsRef.current?.uLineAmber.value.set(colors.flowLineAmber);
+    flowUniformsRef.current?.uNearGlow.value.set(colors.flowNearSphereGlow);
+    sphUniformsRef.current?.uChromeHighlight.value.set(colors.sphereChromeHighlight);
+    starUniformsRef.current?.uStarTint.value.set(colors.starColor);
+  }, [colors]);
 
   /* Scroll runway size — enough for the intro, all 5 text blocks, and the
    * final zoom/corridor phase, plus a 1-instance settle buffer at the end. */
