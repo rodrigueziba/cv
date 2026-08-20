@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { DEFAULT_SCENE_COLORS, type SceneColorKey } from '@/app/lib/sceneConfig';
+import { DEFAULT_SCENE_COLORS, DEBUG_RANGES, type SceneColorKey } from '@/app/lib/sceneConfig';
 
 export type AudioSourceMode = 'file' | 'tone' | 'arpeggio';
 export type ArpeggioMode = 'minor' | 'major';
@@ -20,6 +20,36 @@ interface SceneControlsValue {
   /** Object URL of a user-uploaded mp3, or null to use the default /audio.mp3 */
   uploadedFileUrl: string | null;
   setUploadedFile: (file: File | null) => void;
+
+  /** Has the user pressed Space at least once this session? Drives the
+   * "press space to activate" prompt's visibility. */
+  audioActivated: boolean;
+  setAudioActivated: (activated: boolean) => void;
+  /** Is audio currently playing (vs. paused)? Space bar + the debug
+   * menu's media control both read/write this. */
+  isPlaying: boolean;
+  setIsPlaying: (playing: boolean) => void;
+
+  textBlockFontSizeMultiplier: number;
+  setTextBlockFontSizeMultiplier: (v: number) => void;
+  textBlockShadowSizeMultiplier: number;
+  setTextBlockShadowSizeMultiplier: (v: number) => void;
+  textBlockShadowIntensityMultiplier: number;
+  setTextBlockShadowIntensityMultiplier: (v: number) => void;
+
+  freeCameraEnabled: boolean;
+  setFreeCameraEnabled: (v: boolean) => void;
+  cameraFovDeg: number;
+  setCameraFovDeg: (v: number) => void;
+
+  pitchInertiaMultiplier: number;
+  setPitchInertiaMultiplier: (v: number) => void;
+  floorDopplerIntensityMultiplier: number;
+  setFloorDopplerIntensityMultiplier: (v: number) => void;
+  floorDopplerInertiaMultiplier: number;
+  setFloorDopplerInertiaMultiplier: (v: number) => void;
+  corridorWaveSpeedMultiplier: number;
+  setCorridorWaveSpeedMultiplier: (v: number) => void;
 }
 
 const SceneControlsContext = createContext<SceneControlsValue | null>(null);
@@ -33,6 +63,35 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
   // Mirrors uploadedFileUrl so the unmount-only cleanup effect below can read
   // the latest value without needing uploadedFileUrl in its dependency array.
   const uploadedFileUrlRef = useRef<string | null>(null);
+
+  const [audioActivated, setAudioActivated] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const [textBlockFontSizeMultiplier, setTextBlockFontSizeMultiplier] = useState(
+    DEBUG_RANGES.textBlockFontSizeMultiplier.default
+  );
+  const [textBlockShadowSizeMultiplier, setTextBlockShadowSizeMultiplier] = useState(
+    DEBUG_RANGES.textBlockShadowSizeMultiplier.default
+  );
+  const [textBlockShadowIntensityMultiplier, setTextBlockShadowIntensityMultiplier] = useState(
+    DEBUG_RANGES.textBlockShadowIntensityMultiplier.default
+  );
+
+  const [freeCameraEnabled, setFreeCameraEnabled] = useState(false);
+  const [cameraFovDeg, setCameraFovDeg] = useState(DEBUG_RANGES.cameraFovDeg.default);
+
+  const [pitchInertiaMultiplier, setPitchInertiaMultiplier] = useState(
+    DEBUG_RANGES.pitchInertiaMultiplier.default
+  );
+  const [floorDopplerIntensityMultiplier, setFloorDopplerIntensityMultiplier] = useState(
+    DEBUG_RANGES.floorDopplerIntensityMultiplier.default
+  );
+  const [floorDopplerInertiaMultiplier, setFloorDopplerInertiaMultiplier] = useState(
+    DEBUG_RANGES.floorDopplerInertiaMultiplier.default
+  );
+  const [corridorWaveSpeedMultiplier, setCorridorWaveSpeedMultiplier] = useState(
+    DEBUG_RANGES.corridorWaveSpeedMultiplier.default
+  );
 
   const setUploadedFile = (file: File | null) => {
     if (uploadedFileUrlRef.current) URL.revokeObjectURL(uploadedFileUrlRef.current);
@@ -62,8 +121,47 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
       setArpeggioMode,
       uploadedFileUrl,
       setUploadedFile,
+      audioActivated,
+      setAudioActivated,
+      isPlaying,
+      setIsPlaying,
+      textBlockFontSizeMultiplier,
+      setTextBlockFontSizeMultiplier,
+      textBlockShadowSizeMultiplier,
+      setTextBlockShadowSizeMultiplier,
+      textBlockShadowIntensityMultiplier,
+      setTextBlockShadowIntensityMultiplier,
+      freeCameraEnabled,
+      setFreeCameraEnabled,
+      cameraFovDeg,
+      setCameraFovDeg,
+      pitchInertiaMultiplier,
+      setPitchInertiaMultiplier,
+      floorDopplerIntensityMultiplier,
+      setFloorDopplerIntensityMultiplier,
+      floorDopplerInertiaMultiplier,
+      setFloorDopplerInertiaMultiplier,
+      corridorWaveSpeedMultiplier,
+      setCorridorWaveSpeedMultiplier,
     }),
-    [colors, audioSourceMode, toneFrequencyHz, arpeggioMode, uploadedFileUrl]
+    [
+      colors,
+      audioSourceMode,
+      toneFrequencyHz,
+      arpeggioMode,
+      uploadedFileUrl,
+      audioActivated,
+      isPlaying,
+      textBlockFontSizeMultiplier,
+      textBlockShadowSizeMultiplier,
+      textBlockShadowIntensityMultiplier,
+      freeCameraEnabled,
+      cameraFovDeg,
+      pitchInertiaMultiplier,
+      floorDopplerIntensityMultiplier,
+      floorDopplerInertiaMultiplier,
+      corridorWaveSpeedMultiplier,
+    ]
   );
 
   return <SceneControlsContext.Provider value={value}>{children}</SceneControlsContext.Provider>;
