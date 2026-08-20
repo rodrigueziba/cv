@@ -157,7 +157,8 @@ const FLOW_FRAG = /* glsl */`
     vec2  velDir   = velLen > 0.0001 ? uSphereVel / velLen : vec2(1.0, 0.0);
     vec2  towardFrag = length(delta) > 0.0001 ? normalize(delta) : vec2(1.0, 0.0);
     float along    = dot(towardFrag, velDir); // +1 ahead of motion, -1 behind
-    float lineFreq = 7.0 + along * uDopplerCompress;
+    float dopplerFalloff = 1.0 - smoothstep(0.0, R * 8.0, r); // 1 near the sphere, fades to 0 far away
+    float lineFreq = 7.0 + along * uDopplerCompress * dopplerFalloff;
     float lw       = 0.095;                             /* thin lines */
     float drift    = t * 0.18;                          /* slow drift */
     float lp       = fract(psi * lineFreq + drift);
@@ -334,6 +335,10 @@ export default function Section1() {
   // Floor doppler wave-compression state (Task 15) — decaying intensity
   // driven by sphere speed, stepped every frame in animate().
   const floorDopplerStateRef = useRef<DopplerFloorState>({ intensity: 0, timeSinceActive: 0 });
+  // Last non-negligible sphere velocity direction — held steady while the
+  // sphere is momentarily still so the compression pattern's orientation
+  // doesn't snap to an arbitrary axis while uDopplerCompress is still decaying.
+  const lastSphereVelRef = useRef(new THREE.Vector2(1, 0));
 
   // NOTE: must stay declared before the setSource/setToneFrequency/setArpeggioMode/
   // gesture-unlock effects below — React runs effect setup in declaration order, so
@@ -615,7 +620,11 @@ export default function Section1() {
       floorDopplerStateRef.current = stepFloorDopplerState(
         floorDopplerStateRef.current, floorEffectiveSpeed, dt, FLOOR_DOPPLER_CONFIG
       );
-      flowUniforms.uSphereVel.value.set(dt > 0 ? spring.vx / dt : 0, dt > 0 ? spring.vz / dt : 0);
+      const rawVelX = dt > 0 ? spring.vx / dt : 0;
+      const rawVelZ = dt > 0 ? spring.vz / dt : 0;
+      const rawVelLen = Math.sqrt(rawVelX * rawVelX + rawVelZ * rawVelZ);
+      if (rawVelLen > 0.05) lastSphereVelRef.current.set(rawVelX, rawVelZ);
+      flowUniforms.uSphereVel.value.copy(lastSphereVelRef.current);
       flowUniforms.uDopplerCompress.value = floorDopplerStateRef.current.intensity * FLOOR_DOPPLER_CONFIG.compressionStrength;
 
       /* Phase 0: tight clamp (half-Y, limited X).
