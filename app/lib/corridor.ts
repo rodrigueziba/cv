@@ -70,17 +70,24 @@ const PATTERN_FRAG = /* glsl */ `
     vec3 patCol = mix(uPatternColorA, uPatternColorB, fract(vLocalZ * 0.01 + uTime * 0.015));
     vec3 color  = mix(vec3(0.03, 0.02, 0.07), patCol, band);
 
-    // ── Directional shading (unchanged from the prior corridor-lighting
-    // fix — floor/ceiling/walls must keep reading as distinct 3D
-    // surfaces, not a flat void; see the round-4 fix this comment block
-    // is carried over from) ──────────────────────────────────────────
-    vec3  N        = normalize(vNormal);
+    // Simple fake directional lighting so floor/ceiling/walls read as
+    // distinct 3D surfaces instead of one flat, unlit color fill — this
+    // is what makes the corridor actually look like a tunnel rather than
+    // a colored void for the ~80% of its length past the patterned zone.
+    vec3  N       = normalize(vNormal);
     vec3  lightDir = normalize(vec3(0.4, 1.0, 0.3));
-    float ndotl    = max(dot(N, lightDir), 0.0);
-    float shade    = 0.45 + 0.55 * ndotl;
-    shade         += 0.05 * N.y - 0.03 * N.x;
-    color         *= shade;
-    gl_FragColor   = vec4(color, 1.0);
+    float ndotl   = max(dot(N, lightDir), 0.0);
+    float shade   = 0.45 + 0.55 * ndotl; // ambient floor + directional term
+    // The key light above clamps to the same 0.45 ambient floor for both
+    // the ceiling (N ~ (0,-1,0)) and the right wall (N ~ (-1,0,0)), since
+    // both have a negative dot product with lightDir — making them
+    // pixel-identical. Fix with a small fixed per-axis tint keyed off the
+    // *sign* of each face's dominant normal component: every one of the
+    // 4 cardinal faces (+Y/-Y/+X/-X) gets a distinct constant offset, so
+    // none of them can tie regardless of what the key light contributes.
+    shade += 0.05 * N.y - 0.03 * N.x;
+    color        *= shade;
+    gl_FragColor  = vec4(color, 1.0);
   }
 `;
 
