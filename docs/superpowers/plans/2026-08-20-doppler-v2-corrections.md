@@ -984,10 +984,15 @@ Each block's `transform-origin` should match its own alignment, so scaling doesn
 
 Replace the per-block `<div>`'s style object — keep every existing field, ADD `transform`/`transformOrigin`, and change `textShadow` to pass the two new multipliers:
 
+**Watch out:** several blocks' `position` config (e.g. `block-3`) already carries its own `transform` (`translateX(-50%)`, for centering). Spreading `...block.position` AFTER a `transform: scale(...)` key would let that spread silently clobber the scale — combine them instead, don't let one win outright. `translateX(-50%) scale(k)` (translate first) keeps centering correct at any `k`.
+
 ```tsx
 {TEXT_BLOCKS.map((block, i) => {
   const transformOrigin =
     block.textAlign === 'left' ? 'top left' : block.textAlign === 'right' ? 'top right' : 'top center';
+  const combinedTransform = block.position.transform
+    ? `${block.position.transform} scale(${textBlockFontSizeMultiplier})`
+    : `scale(${textBlockFontSizeMultiplier})`;
   return (
     <div
       key={block.id}
@@ -1007,10 +1012,12 @@ Replace the per-block `<div>`'s style object — keep every existing field, ADD 
         fontSize: block.fontSizeClamp,
         letterSpacing: block.letterSpacing,
         lineHeight: 1.6,
+        // Note: transform:scale() also scales text-shadow, so this isn't fully
+        // independent from textBlockShadowSizeMultiplier — both compound visually.
         textShadow: shadowToCss(block.shadow, textBlockShadowSizeMultiplier, textBlockShadowIntensityMultiplier),
-        transform: `scale(${textBlockFontSizeMultiplier})`,
         transformOrigin,
         ...block.position,
+        transform: combinedTransform, // last — overrides block.position.transform, combining rather than losing it
       }}
     >
       {block.lines.map((line, li) => (
