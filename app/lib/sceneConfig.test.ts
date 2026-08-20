@@ -7,8 +7,8 @@ describe('sceneConfig text blocks', () => {
     TEXT_BLOCKS.forEach((b) => expect(b.lines).toHaveLength(4));
   });
 
-  it('first block starts after 2 scroll instances', () => {
-    expect(TEXT_BLOCKS[0].startInstance).toBe(2);
+  it('first block starts after 1 scroll instance', () => {
+    expect(TEXT_BLOCKS[0].startInstance).toBe(1);
   });
 
   it('each block lasts exactly 3 scroll instances', () => {
