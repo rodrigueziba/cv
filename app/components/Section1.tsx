@@ -33,6 +33,7 @@ import {
   AUDIO_CONFIG,
   FLOOR_DOPPLER_CONFIG,
   FLOOR_DOPPLER_MIN_CAMERA_PROGRESS,
+  CORRIDOR_CONFIG,
 } from '@/app/lib/sceneConfig';
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
 import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTimeline';
@@ -353,6 +354,7 @@ export default function Section1() {
   const corridorRef = useRef<CorridorHandle | null>(null);
   const prevTravelDistanceRef = useRef(0);
   const wasInsideCorridorRef = useRef(false);
+  const endLinkRef = useRef<HTMLAnchorElement>(null);
 
   // NOTE: must stay declared before the setSource/setToneFrequency/setArpeggioMode/
   // gesture-unlock effects below — React runs effect setup in declaration order, so
@@ -667,6 +669,11 @@ export default function Section1() {
 
         /* World-units/second speed → drives the doppler pitch shift (Task 13). */
         sphereSpeed = dt > 0 ? Math.sqrt(spring.vx * spring.vx + spring.vz * spring.vz) / dt : 0;
+
+        if (endLinkRef.current) {
+          endLinkRef.current.style.opacity = '0';
+          endLinkRef.current.style.pointerEvents = 'none';
+        }
       } else {
         /* ── Corridor: mouse control frozen; travel driven by scroll ── */
         if (!corridorRef.current) {
@@ -691,6 +698,16 @@ export default function Section1() {
         prevTravelDistanceRef.current = travelDistance;
 
         corridor.patternUniforms.uTime.value = time;
+        corridor.endWallUniforms.uColorT.value = corridorTravelT;
+
+        const projected = corridor.endWallCenter.clone().project(camera);
+        if (endLinkRef.current) {
+          endLinkRef.current.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
+          endLinkRef.current.style.top  = `${(-projected.y * 0.5 + 0.5) * window.innerHeight}px`;
+          const reached = corridorTravelT >= 0.97;
+          endLinkRef.current.style.opacity = reached ? '1' : '0';
+          endLinkRef.current.style.pointerEvents = reached ? 'auto' : 'none';
+        }
       }
 
       sphere.position.y = SPHERE_R * 0.30; // sunken ~70% into the plane
@@ -847,6 +864,8 @@ export default function Section1() {
     starUniformsRef.current?.uStarTint.value.set(colors.starColor);
     (beamLowpassMeshRef.current?.material as THREE.MeshBasicMaterial | undefined)?.color.set(colors.beamLowpass);
     (beamHighpassMeshRef.current?.material as THREE.MeshBasicMaterial | undefined)?.color.set(colors.beamHighpass);
+    corridorRef.current?.endWallUniforms.uColorStart.value.set(colors.corridorWallStart);
+    corridorRef.current?.endWallUniforms.uColorEnd.value.set(colors.corridorWallEnd);
   }, [colors]);
 
   /* Rebuild the source graph on an actual mode switch — expensive (tears
@@ -915,6 +934,35 @@ export default function Section1() {
 
         {/* ── Scroll-timed text blocks — see app/lib/sceneConfig.ts TEXT_BLOCKS ── */}
         <ScrollTextBlocks ref={textBlockRefs} />
+
+        {/* ── End-of-corridor link — see CORRIDOR_CONFIG in sceneConfig.ts ── */}
+        <a
+          ref={endLinkRef}
+          href={CORRIDOR_CONFIG.finalLinkUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            zIndex: 20,
+            transform: 'translate(-50%, -50%)',
+            opacity: 0,
+            pointerEvents: 'none',
+            transition: 'opacity 0.6s ease',
+            color: '#ffffff',
+            fontFamily: 'var(--font-michroma), sans-serif',
+            fontSize: 'clamp(16px, 2.2vw, 28px)',
+            letterSpacing: '0.18em',
+            textAlign: 'center',
+            textTransform: 'uppercase',
+            textShadow: '2px 2px 0px rgba(0,0,0,0.85)',
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {CORRIDOR_CONFIG.finalLinkText}
+        </a>
 
         {/* ── Animations ───────────────────────────────────────────── */}
         <style>{`
