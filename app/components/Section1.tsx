@@ -36,6 +36,7 @@ import {
   CORRIDOR_CONFIG,
   SPACE_PROMPT_CONFIG,
   TITLE_HIDE_DELAY_SECONDS,
+  FREE_CAMERA_CONFIG,
 } from '@/app/lib/sceneConfig';
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
 import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTimeline';
@@ -319,6 +320,7 @@ export default function Section1() {
     floorDopplerInertiaMultiplier,
     corridorWaveSpeedMultiplier,
     cameraFovDeg,
+    freeCameraEnabled,
   } = useSceneControls();
 
   const [titleVisible, setTitleVisible] = useState(true);
@@ -402,6 +404,45 @@ export default function Section1() {
   useEffect(() => {
     corridorWaveSpeedMultRef.current = corridorWaveSpeedMultiplier;
   }, [corridorWaveSpeedMultiplier]);
+
+  // Debug-only free-fly camera (Task 14) — WASD + Q/E + mouse-look, gated by
+  // the debug menu's freeCameraEnabled toggle (Task 15 adds the UI). Mirrored
+  // into a ref following the colorsRef pattern since it's read inside
+  // animate()'s []-dep closure.
+  const freeCameraKeysRef = useRef<Set<string>>(new Set());
+  const freeCameraEnabledRef = useRef(freeCameraEnabled);
+  useEffect(() => {
+    freeCameraEnabledRef.current = freeCameraEnabled;
+  }, [freeCameraEnabled]);
+  const wasFreeCameraEnabledRef = useRef(false);
+  const freeCamPosRef = useRef(new THREE.Vector3());
+  const freeCamYawRef = useRef(0);
+  const freeCamPitchRef = useRef(0);
+
+  // Persistent for the component's lifetime (unlike the one-shot gesture-
+  // unlock effect below) — tracks which of WASD/Q/E are currently held so
+  // animate()'s updateFreeCamera can read continuous move input.
+  useEffect(() => {
+    const TRACKED_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
+    function isEditableTarget(e: KeyboardEvent): boolean {
+      const target = e.target as HTMLElement | null;
+      return !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (isEditableTarget(e) || !TRACKED_CODES.has(e.code)) return;
+      freeCameraKeysRef.current.add(e.code);
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (!TRACKED_CODES.has(e.code)) return;
+      freeCameraKeysRef.current.delete(e.code);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
 
   // Space-bar audio activation/play-pause (Task 7).
   const spacePressedOnceRef = useRef(false);
@@ -619,6 +660,48 @@ export default function Section1() {
       camera.lookAt(lookTarget);
     }
 
+    /**
+     * WASD (forward/back/strafe) + Q/E (world-Y up/down) + mouse-position-
+     * as-look-rate (no pointer lock — see task notes). Yaw/pitch are
+     * maintained here (not derived from camera.quaternion each frame) so
+     * they can be smoothly accumulated across frames.
+     */
+    function updateFreeCamera(dt: number) {
+      const mx = mouseRef.current.x;
+      const my = mouseRef.current.y;
+
+      freeCamYawRef.current -= mx * FREE_CAMERA_CONFIG.lookSensitivity * dt;
+      freeCamPitchRef.current = THREE.MathUtils.clamp(
+        freeCamPitchRef.current + my * FREE_CAMERA_CONFIG.lookSensitivity * dt,
+        -FREE_CAMERA_CONFIG.maxPitchRad,
+        FREE_CAMERA_CONFIG.maxPitchRad
+      );
+
+      const yaw = freeCamYawRef.current;
+      const pitch = freeCamPitchRef.current;
+      const forward = new THREE.Vector3(
+        Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        Math.cos(yaw) * Math.cos(pitch)
+      );
+      const right = new THREE.Vector3(Math.sin(yaw + Math.PI / 2), 0, Math.cos(yaw + Math.PI / 2));
+
+      const keys = freeCameraKeysRef.current;
+      const move = new THREE.Vector3();
+      if (keys.has('KeyW')) move.add(forward);
+      if (keys.has('KeyS')) move.sub(forward);
+      if (keys.has('KeyD')) move.add(right);
+      if (keys.has('KeyA')) move.sub(right);
+      if (keys.has('KeyE')) move.y -= 1;
+      if (keys.has('KeyQ')) move.y += 1;
+      if (move.lengthSq() > 0) move.normalize().multiplyScalar(FREE_CAMERA_CONFIG.moveSpeed * dt);
+      freeCamPosRef.current.add(move);
+
+      camera.position.copy(freeCamPosRef.current);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(freeCamPosRef.current.clone().add(forward));
+    }
+
     /* ── Spring physics for sphere following mouse ───────────────── */
     const spring = { x: 0, z: 0, vx: 0, vz: 0 };
     const SPRING_K    = 0.22;  // faster follow
@@ -747,12 +830,25 @@ export default function Section1() {
       wasInsideCorridorRef.current = insideCorridorPhase;
 
       /* Camera — computed AFTER the position branch above so it always
-       * reads the CURRENT frame's sphere position, with zero lag. */
-      if (!insideCorridorPhase) {
+       * reads the CURRENT frame's sphere position, with zero lag.
+       * Free-camera mode (debug menu) overrides everything else. */
+      if (freeCameraEnabledRef.current) {
+        if (!wasFreeCameraEnabledRef.current) {
+          // Just enabled — snapshot the camera's current position/facing
+          // as the starting point so there's no jump.
+          freeCamPosRef.current.copy(camera.position);
+          const currentForward = new THREE.Vector3();
+          camera.getWorldDirection(currentForward);
+          freeCamPitchRef.current = Math.asin(THREE.MathUtils.clamp(currentForward.y, -1, 1));
+          freeCamYawRef.current = Math.atan2(currentForward.x, currentForward.z);
+        }
+        updateFreeCamera(dt);
+      } else if (!insideCorridorPhase) {
         applyCamKeyframes(progress);
       } else {
         applyCorridorCamera(sphere.position);
       }
+      wasFreeCameraEnabledRef.current = freeCameraEnabledRef.current;
 
       /* End-of-corridor link — only relevant, and only projected, while
        * actually inside the corridor. */
