@@ -781,6 +781,10 @@ export default function Section1() {
        * compression strength (kept separate from the state machine's own
        * timing so scaling "how strong" never distorts "how long"). */
       const floorEffectiveSpeed = progress >= FLOOR_DOPPLER_MIN_CAMERA_PROGRESS ? sphereSpeed : 0;
+      // Deliberately excludes riseRate (unlike pitchInertiaMultiplier, which scales
+      // all 3 of its time constants) — the rise phase is fast and visually tied to
+      // the sphere's own motion, so only the hold+release "lingering after the
+      // sphere stops" phase reads as needing an adjustable inertia.
       const scaledFloorDopplerCfg = {
         compressionStrength: FLOOR_DOPPLER_CONFIG.compressionStrength,
         riseRate: FLOOR_DOPPLER_CONFIG.riseRate,
