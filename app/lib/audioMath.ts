@@ -1,7 +1,12 @@
-/** Geometric (logarithmic) interpolation — correct for frequency sweeps, unlike linear lerp. */
+/**
+ * Geometric (logarithmic) interpolation — correct for frequency sweeps, unlike linear lerp.
+ * `a` and `b` should be positive (this is for frequency sweeps, which are always
+ * positive in practice); non-positive `a` degrades to a tiny epsilon rather than NaN.
+ */
 export function lerpLog(a: number, b: number, t: number): number {
   const clamped = Math.max(0, Math.min(1, t));
-  return a * Math.pow(b / a, clamped);
+  const base = a > 0 ? a : Number.EPSILON;
+  return base * Math.pow(b / base, clamped);
 }
 
 export interface DopplerSpeedConfig {
@@ -18,8 +23,14 @@ export interface DopplerSpeedConfig {
  * downward shift, so idle is neutral rather than at the min rate.)
  */
 export function speedToPlaybackRate(speedUnitsPerSec: number, cfg: DopplerSpeedConfig): number {
-  const t = Math.max(0, Math.min(1, speedUnitsPerSec / cfg.dopplerSpeedForMaxRate));
+  const t =
+    cfg.dopplerSpeedForMaxRate > 0
+      ? Math.max(0, Math.min(1, speedUnitsPerSec / cfg.dopplerSpeedForMaxRate))
+      : 1;
   const rate = 1.0 + t * (cfg.dopplerMaxPlaybackRate - 1.0);
+  // dopplerMinPlaybackRate is currently unreachable in practice since rate is bounded
+  // to [1.0, max] by construction above — kept for forward-compatibility if a
+  // receding/lower-pitch mapping is added later.
   return Math.max(cfg.dopplerMinPlaybackRate, Math.min(cfg.dopplerMaxPlaybackRate, rate));
 }
 

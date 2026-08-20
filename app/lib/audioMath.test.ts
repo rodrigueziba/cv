@@ -15,6 +15,10 @@ describe('lerpLog', () => {
   it('is geometric (not linear) at the midpoint', () => {
     expect(lerpLog(100, 400, 0.5)).toBeCloseTo(200, 5); // sqrt(100*400) = 200
   });
+  it('clamps t outside [0, 1]', () => {
+    expect(lerpLog(100, 400, -0.5)).toBeCloseTo(lerpLog(100, 400, 0), 5);
+    expect(lerpLog(100, 400, 1.5)).toBeCloseTo(lerpLog(100, 400, 1), 5);
+  });
 });
 
 describe('speedToPlaybackRate', () => {
@@ -68,6 +72,20 @@ describe('stepFloorDopplerState', () => {
     const moving = stepFloorDopplerState(initial, 1, 1.0, cfg);
     let state = moving;
     for (let i = 0; i < 20; i++) state = stepFloorDopplerState(state, 0, 0.3, cfg); // 6s of stillness
+    expect(state.intensity).toBeLessThan(0.05);
+  });
+  it('resumes rising from its current value (not reset to 0) if movement returns mid-release', () => {
+    // Use a short rise so intensity doesn't saturate at the 1.0 cap, keeping the
+    // resumed-rise arithmetic below unaffected by clamping.
+    const moving = stepFloorDopplerState(initial, 1, 0.4, cfg); // intensity -> 0.4
+    // Idle long enough to enter the release phase but not complete it.
+    const state = stepFloorDopplerState(moving, 0, 1.5, cfg); // timeSinceActive=1.5 > holdSeconds=1, partial release
+    expect(state.intensity).toBeGreaterThan(0);
     expect(state.intensity).toBeLessThan(moving.intensity);
+
+    const resumed = stepFloorDopplerState(state, 1, 0.5, cfg);
+    expect(resumed.timeSinceActive).toBe(0);
+    expect(resumed.intensity).toBeCloseTo(state.intensity + cfg.riseRate * 0.5, 5);
+    expect(resumed.intensity).toBeGreaterThan(state.intensity);
   });
 });
