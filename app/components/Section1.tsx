@@ -30,12 +30,14 @@ import {
   DEFAULT_SCENE_COLORS,
   LIGHT_BEAMS,
   AUDIO_CONFIG,
+  FLOOR_DOPPLER_CONFIG,
+  FLOOR_DOPPLER_MIN_CAMERA_PROGRESS,
 } from '@/app/lib/sceneConfig';
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
 import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTimeline';
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
 import { AudioEngine } from '@/app/lib/audioEngine';
-import { stepContactAmount } from '@/app/lib/audioMath';
+import { stepContactAmount, stepFloorDopplerState, type DopplerFloorState } from '@/app/lib/audioMath';
 
 /* ═══════════════════════════════════════════════════════════════
    SHADERS
@@ -106,6 +108,8 @@ const FLOW_FRAG = /* glsl */`
   uniform vec3  uLinePink;
   uniform vec3  uLineAmber;
   uniform vec3  uNearGlow;
+  uniform vec2  uSphereVel;
+  uniform float uDopplerCompress;
 
   varying vec3 vWorldPos;
 
@@ -146,7 +150,14 @@ const FLOW_FRAG = /* glsl */`
     psi += warp;
 
     /* ── Iso-contour lines ───────────────────────────────────────────── */
-    float lineFreq = 7.0;
+    /* Doppler wave compression: lines compress ahead of the sphere's
+     * motion, space out behind it. uDopplerCompress (JS-driven, decays
+     * over time) scales the effect. */
+    float velLen   = length(uSphereVel);
+    vec2  velDir   = velLen > 0.0001 ? uSphereVel / velLen : vec2(1.0, 0.0);
+    vec2  towardFrag = length(delta) > 0.0001 ? normalize(delta) : vec2(1.0, 0.0);
+    float along    = dot(towardFrag, velDir); // +1 ahead of motion, -1 behind
+    float lineFreq = 7.0 + along * uDopplerCompress;
     float lw       = 0.095;                             /* thin lines */
     float drift    = t * 0.18;                          /* slow drift */
     float lp       = fract(psi * lineFreq + drift);
@@ -320,6 +331,10 @@ export default function Section1() {
   const lowpassContactRef  = useRef(0);
   const highpassContactRef = useRef(0);
 
+  // Floor doppler wave-compression state (Task 15) — decaying intensity
+  // driven by sphere speed, stepped every frame in animate().
+  const floorDopplerStateRef = useRef<DopplerFloorState>({ intensity: 0, timeSinceActive: 0 });
+
   // NOTE: must stay declared before the setSource/setToneFrequency/setArpeggioMode/
   // gesture-unlock effects below — React runs effect setup in declaration order, so
   // audioEngineRef.current must be assigned here before those effects can read it
@@ -372,6 +387,8 @@ export default function Section1() {
       uLinePink:     { value: new THREE.Color(DEFAULT_SCENE_COLORS.flowLinePink) },
       uLineAmber:    { value: new THREE.Color(DEFAULT_SCENE_COLORS.flowLineAmber) },
       uNearGlow:     { value: new THREE.Color(DEFAULT_SCENE_COLORS.flowNearSphereGlow) },
+      uSphereVel:       { value: new THREE.Vector2(0, 0) },
+      uDopplerCompress: { value: 0 },
     };
     flowUniformsRef.current = flowUniforms;
     const flowMat  = new THREE.ShaderMaterial({
@@ -589,6 +606,17 @@ export default function Section1() {
         highpassContactRef.current, inHighpassBeam, dt, AUDIO_CONFIG.filterRampSeconds, AUDIO_CONFIG.filterReleaseSeconds
       );
       audioEngineRef.current?.setHighpassAmount(highpassContactRef.current);
+
+      /* Floor doppler wave compression — only "active" (camera far from the
+       * scenario) at/after FLOOR_DOPPLER_MIN_CAMERA_PROGRESS; forcing speed
+       * to 0 below that threshold lets the hold+release curve ease it out
+       * naturally instead of an abrupt cut. */
+      const floorEffectiveSpeed = progress >= FLOOR_DOPPLER_MIN_CAMERA_PROGRESS ? sphereSpeed : 0;
+      floorDopplerStateRef.current = stepFloorDopplerState(
+        floorDopplerStateRef.current, floorEffectiveSpeed, dt, FLOOR_DOPPLER_CONFIG
+      );
+      flowUniforms.uSphereVel.value.set(dt > 0 ? spring.vx / dt : 0, dt > 0 ? spring.vz / dt : 0);
+      flowUniforms.uDopplerCompress.value = floorDopplerStateRef.current.intensity * FLOOR_DOPPLER_CONFIG.compressionStrength;
 
       /* Phase 0: tight clamp (half-Y, limited X).
        * After Phase 0 (progress > 0.25): full disc range, no hard walls.
