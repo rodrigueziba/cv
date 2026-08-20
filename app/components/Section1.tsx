@@ -304,7 +304,18 @@ const SPH_FRAG = /* glsl */`
 ═══════════════════════════════════════════════════════════════ */
 
 export default function Section1() {
-  const { colors, audioSourceMode, toneFrequencyHz, arpeggioMode, uploadedFileUrl, audioActivated } = useSceneControls();
+  const {
+    colors,
+    audioSourceMode,
+    toneFrequencyHz,
+    arpeggioMode,
+    uploadedFileUrl,
+    audioActivated,
+    setAudioSourceMode,
+    setAudioActivated,
+    isPlaying,
+    setIsPlaying,
+  } = useSceneControls();
 
   const [titleVisible, setTitleVisible] = useState(true);
   // Mirrors `titleVisible` for reads inside onScroll — that function lives in
@@ -368,6 +379,13 @@ export default function Section1() {
   const wasInsideCorridorRef = useRef(false);
   const endLinkRef = useRef<HTMLAnchorElement>(null);
 
+  // Space-bar audio activation/play-pause (Task 7).
+  const spacePressedOnceRef = useRef(false);
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
   // NOTE: must stay declared before the setSource/setToneFrequency/setArpeggioMode/
   // gesture-unlock effects below — React runs effect setup in declaration order, so
   // audioEngineRef.current must be assigned here before those effects can read it
@@ -380,7 +398,9 @@ export default function Section1() {
     const W = window.innerWidth;
     const H = window.innerHeight;
 
-    audioEngineRef.current = new AudioEngine();
+    // If the default /audio.mp3 fails to load, fall back to the pure tone —
+    // per the "en default, intenta reproducir el audio.mp3, sino el tono puro" spec.
+    audioEngineRef.current = new AudioEngine(() => setAudioSourceMode('tone'));
 
     /* ── Renderer ───────────────────────────────────────────────── */
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -898,6 +918,37 @@ export default function Section1() {
     };
   }, []);
 
+  /* Space bar: first press activates audio (tries the default mp3, falls
+   * back to tone via the onFileSourceError callback above); every press
+   * after that toggles play/pause. Skipped when focus is on a form control
+   * (e.g. a debug-menu slider) so Space still works normally there. */
+  useEffect(() => {
+    function onSpaceKey(e: KeyboardEvent) {
+      if (e.code !== 'Space' || e.repeat) return;
+      const target = e.target as HTMLElement | null;
+      const isEditable =
+        !!target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.tagName === 'BUTTON' ||
+          target.isContentEditable);
+      if (isEditable) return;
+      e.preventDefault();
+
+      if (!spacePressedOnceRef.current) {
+        spacePressedOnceRef.current = true;
+        setAudioSourceMode('file');
+        setAudioActivated(true);
+        setIsPlaying(true);
+      } else {
+        setIsPlaying(!isPlayingRef.current);
+      }
+    }
+    window.addEventListener('keydown', onSpaceKey);
+    return () => window.removeEventListener('keydown', onSpaceKey);
+  }, []);
+
   /* Push debug-menu color changes into the live shader uniforms. Runs on
    * React's normal render/commit cycle, so it always sees the latest
    * `colors` (unlike the rAF loop inside the mount effect above, which
@@ -947,6 +998,10 @@ export default function Section1() {
   useEffect(() => {
     audioEngineRef.current?.setArpeggioMode(arpeggioMode);
   }, [arpeggioMode]);
+
+  useEffect(() => {
+    audioEngineRef.current?.setPlaying(isPlaying);
+  }, [isPlaying]);
 
   /* Scroll runway size — enough for the intro, all 5 text blocks, and the
    * final zoom/corridor phase, plus a 1-instance settle buffer at the end. */
