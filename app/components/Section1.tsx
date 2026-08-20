@@ -343,7 +343,7 @@ export default function Section1() {
 
   // Floor doppler wave-compression state (Task 15) — decaying intensity
   // driven by sphere speed, stepped every frame in animate().
-  const floorDopplerStateRef = useRef<DopplerFloorState>({ intensity: 0, timeSinceActive: 0 });
+  const floorDopplerStateRef = useRef<DopplerFloorState>({ intensity: 0, timeSinceActive: 0, releaseStartIntensity: 0 });
   // Last non-negligible sphere velocity direction — held steady while the
   // sphere is momentarily still so the compression pattern's orientation
   // doesn't snap to an arbitrary axis while uDopplerCompress is still decaying.

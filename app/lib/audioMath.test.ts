@@ -56,7 +56,7 @@ describe('stepContactAmount', () => {
 
 describe('stepFloorDopplerState', () => {
   const cfg = { compressionStrength: 3.2, riseRate: 1.0, holdSeconds: 1.0, releaseSeconds: 2.0 };
-  const initial: DopplerFloorState = { intensity: 0, timeSinceActive: 0 };
+  const initial: DopplerFloorState = { intensity: 0, timeSinceActive: 0, releaseStartIntensity: 0 };
 
   it('rises toward the speed-driven target while moving', () => {
     const next = stepFloorDopplerState(initial, /* speed */ 1, 0.5, cfg);
@@ -87,5 +87,18 @@ describe('stepFloorDopplerState', () => {
     expect(resumed.timeSinceActive).toBe(0);
     expect(resumed.intensity).toBeCloseTo(state.intensity + cfg.riseRate * 0.5, 5);
     expect(resumed.intensity).toBeGreaterThan(state.intensity);
+  });
+
+  it('release curve is linear and takes approximately the full releaseSeconds to fully decay (regression test for compounding-decay bug)', () => {
+    const cfg = { compressionStrength: 1, riseRate: 1.0, holdSeconds: 0, releaseSeconds: 2.0 };
+    // Get to intensity=1, released, at t=0 of the release window.
+    let state = stepFloorDopplerState({ intensity: 0, timeSinceActive: 0, releaseStartIntensity: 0 }, 1, 1.0, cfg);
+    expect(state.intensity).toBeCloseTo(1, 5);
+    // Stop moving; immediately enters release (holdSeconds=0).
+    const dt = 1 / 60; // simulate 60fps stepping
+    for (let i = 0; i < 30; i++) state = stepFloorDopplerState(state, 0, dt, cfg); // 0.5s of release elapsed
+    // Halfway through a 2.0s release window (at t=0.5s / 25% elapsed) should be ~75% remaining, NOT near-zero.
+    expect(state.intensity).toBeGreaterThan(0.6);
+    expect(state.intensity).toBeCloseTo(0.75, 1);
   });
 });

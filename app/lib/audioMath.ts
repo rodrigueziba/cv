@@ -63,6 +63,15 @@ export interface DopplerFloorState {
   intensity: number;
   /** Seconds elapsed since speed was last above the "moving" threshold. */
   timeSinceActive: number;
+  /**
+   * Intensity snapshot taken the instant the hold phase ended (release
+   * began). The release curve decays linearly from THIS frozen value
+   * over `releaseSeconds`, not from the continuously-updated `intensity`
+   * — multiplying an already-decayed value by the cumulative release
+   * fraction every frame would compound into a much-faster-than-intended,
+   * frame-rate-dependent decay (this was a real bug, found in final QA).
+   */
+  releaseStartIntensity: number;
 }
 
 const MOVING_THRESHOLD = 0.02;
@@ -71,7 +80,7 @@ const MOVING_THRESHOLD = 0.02;
  * Advances the floor-doppler intensity state by one frame.
  * While `speed` is above threshold: intensity rises toward 1 at `riseRate`/sec.
  * Once speed drops to ~0: intensity holds for `holdSeconds`, then eases
- * linearly to 0 over `releaseSeconds`.
+ * LINEARLY to 0 over `releaseSeconds` (frame-rate independent).
  */
 export function stepFloorDopplerState(
   state: DopplerFloorState,
@@ -82,20 +91,19 @@ export function stepFloorDopplerState(
   const moving = speed > MOVING_THRESHOLD;
 
   if (moving) {
-    return {
-      intensity: Math.min(1, state.intensity + cfg.riseRate * dtSeconds),
-      timeSinceActive: 0,
-    };
+    const intensity = Math.min(1, state.intensity + cfg.riseRate * dtSeconds);
+    return { intensity, timeSinceActive: 0, releaseStartIntensity: intensity };
   }
 
   const timeSinceActive = state.timeSinceActive + dtSeconds;
   if (timeSinceActive <= cfg.holdSeconds) {
-    return { intensity: state.intensity, timeSinceActive };
+    return { intensity: state.intensity, timeSinceActive, releaseStartIntensity: state.intensity };
   }
   const releaseElapsed = timeSinceActive - cfg.holdSeconds;
   const releaseT = Math.min(1, releaseElapsed / cfg.releaseSeconds);
   return {
-    intensity: state.intensity * (1 - releaseT),
+    intensity: state.releaseStartIntensity * (1 - releaseT),
     timeSinceActive,
+    releaseStartIntensity: state.releaseStartIntensity, // frozen during release
   };
 }
