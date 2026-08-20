@@ -14,13 +14,13 @@ import { useSceneControls } from '@/app/lib/SceneControlsContext';
 const ScrollTextBlocks = forwardRef<HTMLDivElement[], object>(function ScrollTextBlocks(_props, ref) {
   // Note: transform:scale() also scales text-shadow, so this isn't fully
   // independent from textBlockShadowSizeMultiplier — both compound together visually.
-  const { textBlockFontSizeMultiplier, textBlockShadowSizeMultiplier, textBlockShadowIntensityMultiplier } =
+  const { textBlockFontSizeMultiplier, textBlockShadowSizeMultiplier, textBlockShadowIntensityMultiplier, textBlockAlignment } =
     useSceneControls();
   return (
     <>
       {TEXT_BLOCKS.map((block, i) => {
         const transformOrigin =
-          block.textAlign === 'left' ? 'top left' : block.textAlign === 'right' ? 'top right' : 'top center';
+          textBlockAlignment === 'left' ? 'top left' : textBlockAlignment === 'right' ? 'top right' : 'top center';
         // block.position may already carry its own transform (e.g. block-3's
         // translateX(-50%) centering); combine rather than let the spread
         // below clobber it. Translate first so centering stays correct at
@@ -42,7 +42,12 @@ const ScrollTextBlocks = forwardRef<HTMLDivElement[], object>(function ScrollTex
               opacity: 0,
               pointerEvents: 'none',
               userSelect: 'none',
-              textAlign: block.textAlign,
+              textAlign: textBlockAlignment,
+              // text-align: justify never stretches a block's LAST line by
+              // default — and since each line here is already its own
+              // separate <div> (see the .map below), every line IS the last
+              // line of its own box. text-align-last forces it to justify too.
+              textAlignLast: textBlockAlignment === 'justify' ? 'justify' : undefined,
               color: block.color,
               fontFamily: 'var(--font-michroma), sans-serif',
               fontSize: block.fontSizeClamp,

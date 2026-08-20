@@ -93,6 +93,8 @@ export default function DebugMenu() {
     setTextBlockShadowSizeMultiplier,
     textBlockShadowIntensityMultiplier,
     setTextBlockShadowIntensityMultiplier,
+    textBlockAlignment,
+    setTextBlockAlignment,
     freeCameraEnabled,
     setFreeCameraEnabled,
     cameraFovDeg,
@@ -312,6 +314,19 @@ export default function DebugMenu() {
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontFamily: michroma, fontWeight: 400, marginBottom: 6 }}>Texto — bloques</div>
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span>Justificación de texto</span>
+            <select
+              value={textBlockAlignment}
+              onChange={(e) => setTextBlockAlignment(e.target.value as typeof textBlockAlignment)}
+              style={{ marginLeft: 8 }}
+            >
+              <option value="justify">Justificado</option>
+              <option value="center">Centrado</option>
+              <option value="left">Izquierda</option>
+              <option value="right">Derecha</option>
+            </select>
+          </label>
           <SliderRow
             label="Tamaño de fuente"
             value={textBlockFontSizeMultiplier}

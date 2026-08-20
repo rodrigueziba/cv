@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { DEFAULT_SCENE_COLORS, DEBUG_RANGES, type SceneColorKey } from '@/app/lib/sceneConfig';
+import { DEFAULT_SCENE_COLORS, DEBUG_RANGES, DEFAULT_TEXT_BLOCK_ALIGNMENT, type SceneColorKey, type TextBlockAlignment } from '@/app/lib/sceneConfig';
 
 export type AudioSourceMode = 'file' | 'tone' | 'arpeggio';
 export type ArpeggioMode = 'minor' | 'major';
@@ -36,6 +36,8 @@ interface SceneControlsValue {
   setTextBlockShadowSizeMultiplier: (v: number) => void;
   textBlockShadowIntensityMultiplier: number;
   setTextBlockShadowIntensityMultiplier: (v: number) => void;
+  textBlockAlignment: TextBlockAlignment;
+  setTextBlockAlignment: (v: TextBlockAlignment) => void;
 
   freeCameraEnabled: boolean;
   setFreeCameraEnabled: (v: boolean) => void;
@@ -76,6 +78,7 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
   const [textBlockShadowIntensityMultiplier, setTextBlockShadowIntensityMultiplier] = useState(
     DEBUG_RANGES.textBlockShadowIntensityMultiplier.default
   );
+  const [textBlockAlignment, setTextBlockAlignment] = useState<TextBlockAlignment>(DEFAULT_TEXT_BLOCK_ALIGNMENT);
 
   const [freeCameraEnabled, setFreeCameraEnabled] = useState(false);
   const [cameraFovDeg, setCameraFovDeg] = useState(DEBUG_RANGES.cameraFovDeg.default);
@@ -131,6 +134,8 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
       setTextBlockShadowSizeMultiplier,
       textBlockShadowIntensityMultiplier,
       setTextBlockShadowIntensityMultiplier,
+      textBlockAlignment,
+      setTextBlockAlignment,
       freeCameraEnabled,
       setFreeCameraEnabled,
       cameraFovDeg,
@@ -155,6 +160,7 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
       textBlockFontSizeMultiplier,
       textBlockShadowSizeMultiplier,
       textBlockShadowIntensityMultiplier,
+      textBlockAlignment,
       freeCameraEnabled,
       cameraFovDeg,
       pitchInertiaMultiplier,

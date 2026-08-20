@@ -62,17 +62,22 @@ export const SCROLL_INSTANCE_PX = () => (typeof window === 'undefined' ? 800 : w
  * per spec: 1 instance fade-in, 1 instance held, 1 instance fade-out. */
 export const TEXT_BLOCK_DURATION_INSTANCES = 3;
 
+export type TextBlockAlignment = 'left' | 'center' | 'right' | 'justify';
+
+export const DEFAULT_TEXT_BLOCK_ALIGNMENT: TextBlockAlignment = 'justify';
+
 export interface TextBlockConfig {
   id: string;
   lines: [string, string, string, string];
   startInstance: number;
   fontSizeClamp: string;
   letterSpacing: string;
-  textAlign: 'left' | 'center' | 'right';
   color: string;
   shadow: TextShadowConfig;
-  /** Absolute placement inside the sticky viewport. Any CSS position subset. */
-  position: { top?: string; bottom?: string; left?: string; right?: string; transform?: string; maxWidth?: string };
+  /** Absolute placement inside the sticky viewport. `width` (not just
+   * max-width) is required for 'justify' alignment to have any visible
+   * effect — see ScrollTextBlocks.tsx. */
+  position: { top?: string; bottom?: string; left?: string; right?: string; transform?: string; width?: string };
 }
 
 export const TEXT_BLOCKS: TextBlockConfig[] = [
@@ -87,10 +92,9 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
     startInstance: 1,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
     letterSpacing: '0.12em',
-    textAlign: 'left',
     color: '#ffffff',
     shadow: { colorRgb: '0,0,0', alpha: 0.80, offsetXPx: 1.1, offsetYPx: 1.1, blurPx: 0 },
-    position: { top: '30%', left: '8%', maxWidth: '34ch' },
+    position: { top: '30%', left: '8%', width: '34ch' },
   },
   {
     id: 'block-2',
@@ -103,10 +107,9 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
     startInstance: 4,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
     letterSpacing: '0.12em',
-    textAlign: 'right',
     color: '#ffffff',
     shadow: { colorRgb: '0,0,0', alpha: 0.80, offsetXPx: 1.1, offsetYPx: 1.1, blurPx: 0 },
-    position: { top: '30%', right: '8%', maxWidth: '34ch' },
+    position: { top: '30%', right: '8%', width: '34ch' },
   },
   {
     id: 'block-3',
@@ -119,10 +122,9 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
     startInstance: 7,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
     letterSpacing: '0.12em',
-    textAlign: 'center',
     color: '#ffffff',
     shadow: { colorRgb: '0,0,0', alpha: 0.80, offsetXPx: 1.1, offsetYPx: 1.1, blurPx: 0 },
-    position: { top: '68%', left: '50%', transform: 'translateX(-50%)', maxWidth: '38ch' },
+    position: { top: '68%', left: '50%', transform: 'translateX(-50%)', width: '38ch' },
   },
   {
     id: 'block-4',
@@ -135,10 +137,9 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
     startInstance: 10,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
     letterSpacing: '0.12em',
-    textAlign: 'left',
     color: '#ffffff',
     shadow: { colorRgb: '0,0,0', alpha: 0.80, offsetXPx: 1.1, offsetYPx: 1.1, blurPx: 0 },
-    position: { top: '30%', left: '8%', maxWidth: '34ch' },
+    position: { top: '30%', left: '8%', width: '34ch' },
   },
   {
     id: 'block-5',
@@ -151,10 +152,9 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
     startInstance: 13,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
     letterSpacing: '0.12em',
-    textAlign: 'right',
     color: '#ffffff',
     shadow: { colorRgb: '0,0,0', alpha: 0.80, offsetXPx: 1.1, offsetYPx: 1.1, blurPx: 0 },
-    position: { top: '30%', right: '8%', maxWidth: '34ch' },
+    position: { top: '30%', right: '8%', width: '34ch' },
   },
 ];
 
