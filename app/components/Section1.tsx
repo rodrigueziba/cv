@@ -318,6 +318,7 @@ export default function Section1() {
     floorDopplerIntensityMultiplier,
     floorDopplerInertiaMultiplier,
     corridorWaveSpeedMultiplier,
+    cameraFovDeg,
   } = useSceneControls();
 
   const [titleVisible, setTitleVisible] = useState(true);
@@ -391,6 +392,7 @@ export default function Section1() {
   const prevTravelDistanceRef = useRef(0);
   const wasInsideCorridorRef = useRef(false);
   const endLinkRef = useRef<HTMLAnchorElement>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
 
   // Accumulates independently of the global clock so the debug-menu wave-
   // speed multiplier can change live without discontinuity (a direct
@@ -439,6 +441,7 @@ export default function Section1() {
 
     /* ── Camera ─────────────────────────────────────────────────── */
     const camera = new THREE.PerspectiveCamera(65, W / H, 0.1, 500);
+    cameraRef.current = camera;
     camera.position.set(0, 7, 12);
     camera.lookAt(0, 0, 0);
 
@@ -994,6 +997,16 @@ export default function Section1() {
     corridorRef.current?.endWallUniforms.uColorStart.value.set(colors.corridorWallStart);
     corridorRef.current?.endWallUniforms.uColorEnd.value.set(colors.corridorWallEnd);
   }, [colors]);
+
+  /* Push debug-menu FOV changes into the live camera. Null-guarded because
+   * this effect can fire before the mount effect has run (e.g. fast
+   * refresh). Only touches `fov` — aspect ratio and near/far planes stay
+   * as constructed. */
+  useEffect(() => {
+    if (!cameraRef.current) return;
+    cameraRef.current.fov = cameraFovDeg;
+    cameraRef.current.updateProjectionMatrix();
+  }, [cameraFovDeg]);
 
   /* Rebuild the source graph on an actual mode switch — expensive (tears
    * down and recreates the oscillator/audio element), audible click is
