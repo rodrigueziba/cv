@@ -334,6 +334,7 @@ export default function Section1() {
   const mountRef      = useRef<HTMLDivElement>(null);
   const indicatorRef  = useRef<HTMLDivElement>(null);
   const titleRef      = useRef<HTMLDivElement>(null);
+  const spacePromptRef = useRef<HTMLDivElement>(null);
   const scrollRef     = useRef(0);
   const mouseRef      = useRef({ x: 0, y: 0 });
   const textBlockRefs = useRef<HTMLDivElement[]>([]);
@@ -604,7 +605,15 @@ export default function Section1() {
       const camPos = spherePos.clone().add(behindOffset).add(new THREE.Vector3(0, diameter * CORRIDOR_CONFIG.chaseHeightMultiplier, 0));
       camera.position.copy(camPos);
       camera.up.copy(CORRIDOR_UP);
-      camera.lookAt(spherePos);
+      // Look AHEAD along the travel axis and at a height blended between the
+      // sphere's low position and the tunnel's vertical center — locking onto
+      // the sphere alone pitches the camera too steeply down, pushing the
+      // tunnel/end-wall geometry far above screen-center.
+      const lookAheadOffset = corridor.axis.clone().multiplyScalar(diameter * 3);
+      const tunnelCenterY = corridor.entrance.y + corridor.crossSection / 2;
+      const lookTarget = spherePos.clone().add(lookAheadOffset);
+      lookTarget.y = THREE.MathUtils.lerp(spherePos.y, tunnelCenterY, 0.5);
+      camera.lookAt(lookTarget);
     }
 
     /* ── Spring physics for sphere following mouse ───────────────── */
@@ -640,6 +649,19 @@ export default function Section1() {
         { start: FINAL_PHASE_START_INSTANCE, end: FINAL_PHASE_START_INSTANCE + FINAL_PHASE_DURATION_INSTANCES }
       );
       const insideCorridorPhase = finalPhaseProgress > 0;
+
+      // Title/space-prompt are otherwise controlled by React state that's
+      // independent of scroll depth (a wall-clock timer / audioActivated) —
+      // a fast scroll can carry either into the corridor view, overlapping
+      // the 3D scene. Force-hide imperatively while inside the corridor;
+      // clearing to '' on exit hands control back to React's own styling.
+      if (titleRef.current) {
+        titleRef.current.style.opacity = insideCorridorPhase ? '0' : '';
+        titleRef.current.style.animation = insideCorridorPhase ? 'none' : '';
+      }
+      if (spacePromptRef.current) {
+        spacePromptRef.current.style.opacity = insideCorridorPhase ? '0' : '';
+      }
 
       /*
        * Progressive mouse control rotation
@@ -1148,31 +1170,31 @@ export default function Section1() {
         </div>
 
         {/* ── Press-space-to-activate-audio prompt — mirrors the scroll indicator's styling ── */}
-        {!audioActivated && (
-          <div
-            style={{
-              position:      'absolute',
-              bottom:        SPACE_PROMPT_CONFIG.bottomPosition,
-              left:          '50%',
-              transform:     'translateX(-50%)',
-              zIndex:        10,
-              color:         'rgba(210, 170, 255, 0.60)',
-              fontFamily:    '"Helvetica Neue", Helvetica, Arial, sans-serif',
-              fontSize:      '9px',
-              fontWeight:    700,
-              letterSpacing: '0.30em',
-              textTransform: 'uppercase',
-              textAlign:     'center',
-              userSelect:    'none',
-              pointerEvents: 'none',
-              transition:    'opacity 0.4s ease',
-              whiteSpace:    'nowrap',
-              padding:       '0 16px',
-            }}
-          >
-            {SPACE_PROMPT_CONFIG.text}
-          </div>
-        )}
+        <div
+          ref={spacePromptRef}
+          style={{
+            position:      'absolute',
+            bottom:        SPACE_PROMPT_CONFIG.bottomPosition,
+            left:          '50%',
+            transform:     'translateX(-50%)',
+            zIndex:        10,
+            color:         'rgba(210, 170, 255, 0.60)',
+            fontFamily:    '"Helvetica Neue", Helvetica, Arial, sans-serif',
+            fontSize:      '9px',
+            fontWeight:    700,
+            letterSpacing: '0.30em',
+            textTransform: 'uppercase',
+            textAlign:     'center',
+            userSelect:    'none',
+            pointerEvents: 'none',
+            opacity:       audioActivated ? 0 : undefined,
+            transition:    'opacity 0.4s ease',
+            whiteSpace:    'nowrap',
+            padding:       '0 16px',
+          }}
+        >
+          {SPACE_PROMPT_CONFIG.text}
+        </div>
       </div>
     </div>
   );

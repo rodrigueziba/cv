@@ -326,7 +326,16 @@ export const CORRIDOR_CONFIG = {
   patternedPortion: 0.2, // first 20% of length keeps the wave pattern
   patternColorA: '#3a2a6b', // corridor's own pattern colors (independent of the disc's debug-menu colors)
   patternColorB: '#6b2a55',
-  solidColor: '#0a0a14', // floor/ceiling/side-walls color past the patterned portion
+  // was '#0a0a14', then '#241c40' — both render far darker on screen than
+  // their hex value suggests: the scene's ACESFilmicToneMapping (applied at
+  // EffectComposer's final copy-to-screen blit, which uses a built-in
+  // MeshBasicMaterial and therefore DOES run the tonemapping/colorspace
+  // shader chunks that this file's custom ShaderMaterials skip) has a toe
+  // that crushes low-luminance colors hard — empirically verified via
+  // Playwright pixel-sampling, e.g. '#241c40' (36,28,64) rendered as only
+  // ~(14,9,43) on screen, barely distinguishable from the background.
+  // This brighter value clears that crush with a comfortable margin.
+  solidColor: '#4a3a72',
   // End-wall red→blue colors are NOT duplicated here — they live in
   // DEFAULT_SCENE_COLORS.corridorWallStart/End above, the single
   // source of truth the debug menu's color pickers also read/write.
@@ -340,8 +349,8 @@ export const CORRIDOR_CONFIG = {
   yOffset: -80,
   /** Chase-camera distance behind the sphere / height above it,
    * expressed as a multiplier of the sphere's diameter. */
-  chaseDistanceMultiplier: 4,
-  chaseHeightMultiplier: 2,
+  chaseDistanceMultiplier: 5, // was 4 — a bit further back, gentler angle
+  chaseHeightMultiplier: 1.3, // was 2 — less steep downward pitch onto the sphere
 };
 
 /* ── FREE CAMERA (debug menu toggle) ───────────────────────────────
