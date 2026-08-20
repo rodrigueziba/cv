@@ -2,17 +2,23 @@ import * as THREE from 'three';
 import { HASH_NOISE_FBM_GLSL } from '@/app/lib/shaders/common';
 import { CORRIDOR_CONFIG } from '@/app/lib/sceneConfig';
 
-/* Floor / ceiling / side walls: wave pattern for the first
- * `patternedPortion` of the corridor's length, then a solid color. */
+/* Floor / ceiling / side walls: a flow-line pattern (same visual
+ * family as the main stage's FLOW_FRAG) for the corridor's full
+ * length — reactive to the sphere's movement in the first
+ * `uReactivePortion` of the length, then calm/static (reading like
+ * the main stage's undisturbed lines at the very start of the page's
+ * scroll) for the rest. */
 const PATTERN_VERT = /* glsl */ `
   uniform float uMeshOffsetZ;
   uniform float uLength;
-  varying float vPatternT; // 0 at the entrance, 1 at the end wall
+  varying float vPatternT;  // 0 at the entrance, 1 at the end wall
   varying vec2  vSurfaceUV;
   varying vec3  vNormal;
+  varying float vLocalZ;    // this fragment's local Z, SAME space/units as uSpherePosZ (0 at entrance, negative toward the end wall)
   void main() {
     float groupLocalZ = uMeshOffsetZ + position.z;
     vPatternT   = clamp(-groupLocalZ / uLength, 0.0, 1.0);
+    vLocalZ     = groupLocalZ;
     vSurfaceUV  = position.xy;
     vNormal     = normalize(normalMatrix * normal);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -23,38 +29,58 @@ const PATTERN_FRAG = /* glsl */ `
   precision highp float;
   ${HASH_NOISE_FBM_GLSL}
   uniform float uTime;
-  uniform float uPatternedPortion;
+  uniform float uReactivePortion; // fraction (0..1) of the tunnel's length that reacts to the sphere — the rest is calm/static
+  uniform float uLength;
+  uniform float uSpherePosZ;      // sphere's current local Z inside the corridor group — same space as vLocalZ
+  uniform float uDopplerCompress; // same scalar the main stage's flow field (FLOW_FRAG) uses for its doppler-compression effect
   uniform vec3  uPatternColorA;
   uniform vec3  uPatternColorB;
-  uniform vec3  uSolidColor;
   varying float vPatternT;
   varying vec2  vSurfaceUV;
   varying vec3  vNormal;
+  varying float vLocalZ;
   void main() {
-    float n       = fbm(vSurfaceUV * 0.15 + vec2(uTime * 0.05, 0.0));
-    float lines   = smoothstep(0.45, 0.50, fract(n * 6.0 + uTime * 0.1));
-    vec3  patCol  = mix(uPatternColorA, uPatternColorB, n);
-    vec3  patterned = mix(vec3(0.02, 0.02, 0.05), patCol, lines);
-    float toSolid = smoothstep(uPatternedPortion * 0.85, uPatternedPortion, vPatternT);
-    vec3  color   = mix(patterned, uSolidColor, toSolid);
-    // Simple fake directional lighting so floor/ceiling/walls read as
-    // distinct 3D surfaces instead of one flat, unlit color fill — this
-    // is what makes the corridor actually look like a tunnel rather than
-    // a colored void for the ~80% of its length past the patterned zone.
-    vec3  N       = normalize(vNormal);
+    // How close this fragment is along the tunnel's length to the sphere —
+    // a 1D analogue of FLOW_FRAG's radial falloff around the sphere.
+    float distFromSphere = abs(vLocalZ - uSpherePosZ);
+    float falloff = 1.0 - smoothstep(0.0, uLength * 0.30, distFromSphere);
+    // Reactive only in the tunnel's first uReactivePortion; the back half
+    // always reads like the calm, undisturbed lines at the very start of
+    // the page's scroll (sphere far away) — smoothstepped over a short
+    // band so there's no visible seam at the 50% boundary.
+    float reactiveZone = 1.0 - smoothstep(uReactivePortion - 0.06, uReactivePortion, vPatternT);
+    float compress = uDopplerCompress * falloff * reactiveZone;
+
+    // ── Flow-style iso-lines running along the tunnel's length ──────
+    // Same spirit as FLOW_FRAG's iso-contour bands: fbm warp + a
+    // periodic function whose local frequency rises near the sphere.
+    float warp     = fbm(vSurfaceUV * 0.12 + vec2(vLocalZ * 0.02, uTime * 0.05)) - 0.5;
+    // NOTE: retuned from the plan's literal compress * 0.12 factor — at
+    // that value the frequency swing between "sphere just passed through
+    // fast" and "sphere idle" was empirically too subtle to read on
+    // screen (verified via Playwright pixel-sampling: near-identical
+    // line profiles). 0.45 makes the compression clearly visible without
+    // going so far it reads as noise/moire at full uDopplerCompress.
+    float lineFreq = 0.55 + compress * 0.45;
+    float lp       = fract(vLocalZ * lineFreq + warp * 1.4 + uTime * 0.12);
+    float lw       = 0.10;
+    float band     = smoothstep(0.0, lw, lp) * smoothstep(2.0 * lw, lw, lp);
+    band           = pow(band, 0.6);
+
+    vec3 patCol = mix(uPatternColorA, uPatternColorB, fract(vLocalZ * 0.01 + uTime * 0.015));
+    vec3 color  = mix(vec3(0.03, 0.02, 0.07), patCol, band);
+
+    // ── Directional shading (unchanged from the prior corridor-lighting
+    // fix — floor/ceiling/walls must keep reading as distinct 3D
+    // surfaces, not a flat void; see the round-4 fix this comment block
+    // is carried over from) ──────────────────────────────────────────
+    vec3  N        = normalize(vNormal);
     vec3  lightDir = normalize(vec3(0.4, 1.0, 0.3));
-    float ndotl   = max(dot(N, lightDir), 0.0);
-    float shade   = 0.45 + 0.55 * ndotl; // ambient floor + directional term
-    // The key light above clamps to the same 0.45 ambient floor for both
-    // the ceiling (N ~ (0,-1,0)) and the right wall (N ~ (-1,0,0)), since
-    // both have a negative dot product with lightDir — making them
-    // pixel-identical. Fix with a small fixed per-axis tint keyed off the
-    // *sign* of each face's dominant normal component: every one of the
-    // 4 cardinal faces (+Y/-Y/+X/-X) gets a distinct constant offset, so
-    // none of them can tie regardless of what the key light contributes.
-    shade += 0.05 * N.y - 0.03 * N.x;
-    color        *= shade;
-    gl_FragColor  = vec4(color, 1.0);
+    float ndotl    = max(dot(N, lightDir), 0.0);
+    float shade    = 0.45 + 0.55 * ndotl;
+    shade         += 0.05 * N.y - 0.03 * N.x;
+    color         *= shade;
+    gl_FragColor   = vec4(color, 1.0);
   }
 `;
 
@@ -110,10 +136,11 @@ export function buildCorridor(
   const patternUniforms: Record<string, THREE.IUniform> = {
     uTime: { value: 0 },
     uLength: { value: length },
-    uPatternedPortion: { value: CORRIDOR_CONFIG.patternedPortion },
+    uReactivePortion: { value: CORRIDOR_CONFIG.reactivePortion },
+    uSpherePosZ: { value: 0 },
+    uDopplerCompress: { value: 0 },
     uPatternColorA: { value: new THREE.Color(CORRIDOR_CONFIG.patternColorA) },
     uPatternColorB: { value: new THREE.Color(CORRIDOR_CONFIG.patternColorB) },
-    uSolidColor: { value: new THREE.Color(CORRIDOR_CONFIG.solidColor) },
     uMeshOffsetZ: { value: 0 }, // overridden per-surface below
   };
 

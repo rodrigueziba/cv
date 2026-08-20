@@ -327,19 +327,9 @@ export const FINAL_PHASE_SUBRANGES = {
 export const CORRIDOR_CONFIG = {
   lengthMultiplier: 20, // × sphere diameter
   crossSectionMultiplier: 4, // × sphere diameter (walls/ceiling/floor size)
-  patternedPortion: 0.2, // first 20% of length keeps the wave pattern
+  reactivePortion: 0.5, // first 50% of length reacts to the sphere; the rest is calm/static
   patternColorA: '#3a2a6b', // corridor's own pattern colors (independent of the disc's debug-menu colors)
   patternColorB: '#6b2a55',
-  // was '#0a0a14', then '#241c40' — both render far darker on screen than
-  // their hex value suggests: the scene's ACESFilmicToneMapping (applied at
-  // EffectComposer's final copy-to-screen blit, which uses a built-in
-  // MeshBasicMaterial and therefore DOES run the tonemapping/colorspace
-  // shader chunks that this file's custom ShaderMaterials skip) has a toe
-  // that crushes low-luminance colors hard — empirically verified via
-  // Playwright pixel-sampling, e.g. '#241c40' (36,28,64) rendered as only
-  // ~(14,9,43) on screen, barely distinguishable from the background.
-  // This brighter value clears that crush with a comfortable margin.
-  solidColor: '#4a3a72',
   // End-wall red→blue colors are NOT duplicated here — they live in
   // DEFAULT_SCENE_COLORS.corridorWallStart/End above, the single
   // source of truth the debug menu's color pickers also read/write.

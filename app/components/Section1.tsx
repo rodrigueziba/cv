@@ -833,6 +833,7 @@ export default function Section1() {
         corridorTimeAccumRef.current += dt * corridorWaveSpeedMultRef.current;
         corridor.patternUniforms.uTime.value = corridorTimeAccumRef.current;
         corridor.endWallUniforms.uColorT.value = corridorTravelT;
+        corridor.patternUniforms.uSpherePosZ.value = -travelDistance;
       }
 
       /* Ground level differs by phase — disc floor is at world y=0,
@@ -938,6 +939,7 @@ export default function Section1() {
       flowUniforms.uSphereVel.value.copy(lastSphereVelRef.current);
       flowUniforms.uDopplerCompress.value =
         floorDopplerStateRef.current.intensity * FLOOR_DOPPLER_CONFIG.compressionStrength * floorDopplerIntensityMultRef.current;
+      corridor.patternUniforms.uDopplerCompress.value = flowUniforms.uDopplerCompress.value;
 
       /* Bloom reacts to progress: subtle at start, punchy at Phase 3 */
       bloom.strength = 0.12 + progress * 0.30;
