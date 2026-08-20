@@ -284,6 +284,11 @@ export const AUDIO_CONFIG = {
  * considered "touching" a ray, for the progressive audio filters:
  * RED → lowpass, AMBER → highpass (per the user's clarification).     */
 export const DIAGONAL_RAYS_CONFIG = {
+  // `sv` is the raw plane-equation value (z - 0.55x + 1), NOT a normalized
+  // Euclidean distance from the line — true perpendicular distance would be
+  // |sv| / sqrt(1 + 0.55^2) ≈ |sv| / 1.141. contactWidth is tuned by eye
+  // against the shader's visual glow width (sCore/sGlow falloff terms in
+  // FLOW_FRAG), not derived analytically.
   contactWidth: 1.2,
   secondaryOffset: 2.0, // MUST match FLOW_FRAG's `sv + 2.0` — keep in sync if that shader term ever changes
 };

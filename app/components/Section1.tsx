@@ -199,6 +199,8 @@ const FLOW_FRAG = /* glsl */`
 
     /* ── Red diagonal streak ─────────────────────────────────────────── */
     /* World-space line: Z = 0.55·X − 1 (upper-left → lower-right)       */
+    // KEEP IN SYNC: Section1.tsx's animate() contact-detection code and
+    // DIAGONAL_RAYS_CONFIG mirror this exact formula for the audio filters.
     float sv    = vWorldPos.z - 0.55 * vWorldPos.x + 1.0;
     float sCore = exp(-abs(sv) * 4.0);                 /* sharp bright core */
     float sGlow = exp(-abs(sv) * 0.55);                /* wide soft glow    */
@@ -215,6 +217,7 @@ const FLOW_FRAG = /* glsl */`
 
     vec3  sCol  = sRed1 * (sCore * 1.80 + sGlow * 0.10 * (1.0 + pMask * 0.5));
     /* Secondary amber line shifts with its own hue */
+    // KEEP IN SYNC: DIAGONAL_RAYS_CONFIG.secondaryOffset must match this "+ 2.0".
     sCol       += sRed2 * exp(-abs(sv + 2.0) * 2.2) * 0.55;
     /* Attenuate at sphere */
     sCol       *= (1.0 - nearSph * 0.60);
