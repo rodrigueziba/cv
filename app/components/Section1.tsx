@@ -318,6 +318,7 @@ export default function Section1() {
     setAudioActivated,
     isPlaying,
     setIsPlaying,
+    pitchInertiaMultiplier,
   } = useSceneControls();
 
   const [titleVisible, setTitleVisible] = useState(true);
@@ -738,7 +739,7 @@ export default function Section1() {
       sphere.position.y = SPHERE_R * 0.30; // sunken ~70% into the plane
       wasInsideCorridorRef.current = insideCorridorPhase;
 
-      audioEngineRef.current?.setDopplerSpeed(sphereSpeed);
+      audioEngineRef.current?.setDopplerSpeed(sphereSpeed, dt);
       flowUniforms.uSphereXZ.value.set(sphere.position.x, sphere.position.z);
 
       /* Diagonal-ray contact → progressive lowpass (red) / highpass (amber).
@@ -975,6 +976,10 @@ export default function Section1() {
   useEffect(() => {
     audioEngineRef.current?.setArpeggioMode(arpeggioMode);
   }, [arpeggioMode]);
+
+  useEffect(() => {
+    audioEngineRef.current?.setPitchInertiaMultiplier(pitchInertiaMultiplier);
+  }, [pitchInertiaMultiplier]);
 
   useEffect(() => {
     audioEngineRef.current?.setPlaying(isPlaying);
