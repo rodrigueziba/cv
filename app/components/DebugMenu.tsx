@@ -43,7 +43,16 @@ export default function DebugMenu() {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Shift' && !e.repeat) setOpen((v) => !v);
+      if (e.key !== 'Shift' || e.repeat) return;
+      const target = e.target as HTMLElement | null;
+      const isEditable =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable);
+      if (isEditable) return;
+      setOpen((v) => !v);
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
