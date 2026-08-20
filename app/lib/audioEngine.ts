@@ -80,6 +80,14 @@ export class AudioEngine {
   async resume(): Promise<void> {
     const { ctx } = this.ensureGraph();
     if (ctx.state === 'suspended') await ctx.resume();
+    // If setSource('file', ...) ran before the context was resumed, its
+    // el.play() call was rejected with NotAllowedError. Retry it now that
+    // we're (hopefully) inside/after a user gesture.
+    if (this.audioEl && this.audioEl.paused) {
+      this.audioEl.play().catch(() => {
+        /* still blocked — e.g. browser requires play() itself inside the gesture handler (Safari) */
+      });
+    }
   }
 
   private teardownSource(): void {
@@ -126,8 +134,9 @@ export class AudioEngine {
       node.connect(lowpass);
       el.play().catch((err) => {
         // NotAllowedError just means resume() hasn't run yet from a user gesture —
-        // retried by caller. Anything else (404, corrupt file, bad MIME) is a real
-        // failure and should surface a diagnostic instead of going silently mute.
+        // resume() retries el.play() itself once it does. Anything else (404,
+        // corrupt file, bad MIME) is a real failure and should surface a
+        // diagnostic instead of going silently mute.
         if (err?.name !== 'NotAllowedError') {
           console.warn('[AudioEngine] file source failed to play', err);
         }

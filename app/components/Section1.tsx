@@ -290,6 +290,13 @@ export default function Section1() {
   const textBlockRefs = useRef<HTMLDivElement[]>([]);
   const scrollInstanceRef = useRef(0); // raw scroll timeline position, in "instances"
   const audioEngineRef = useRef<AudioEngine | null>(null);
+  // Lets the uploadedFileUrl effect below check the CURRENT mode without
+  // depending on it (which would rebuild the source graph on every mode
+  // switch in addition to the dedicated audioSourceMode effect).
+  const audioSourceModeRef = useRef(audioSourceMode);
+  useEffect(() => {
+    audioSourceModeRef.current = audioSourceMode;
+  }, [audioSourceMode]);
 
   // Read by a later task's rAF-loop code (corridor construction) that needs the
   // CURRENT colors without the stale-closure problem `animate()`'s single
@@ -303,6 +310,10 @@ export default function Section1() {
   const sphUniformsRef  = useRef<Record<string, THREE.IUniform> | null>(null);
   const starUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
 
+  // NOTE: must be declared before the setSource/setToneFrequency/setArpeggioMode/
+  // gesture-unlock effects below — this effect's cleanup (dispose()) must run
+  // LAST (React runs cleanups in reverse declaration order), tearing down
+  // whatever those other effects built into the audio graph.
   useEffect(() => {
     if (!mountRef.current || !containerRef.current) return;
     const mount     = mountRef.current;
@@ -622,7 +633,7 @@ export default function Section1() {
    * autoplay until then. Removes its own listeners after the first fire. */
   useEffect(() => {
     function unlock() {
-      audioEngineRef.current?.resume();
+      audioEngineRef.current?.resume().catch(() => {});
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
       window.removeEventListener('wheel', unlock);
@@ -651,9 +662,9 @@ export default function Section1() {
     starUniformsRef.current?.uStarTint.value.set(colors.starColor);
   }, [colors]);
 
-  /* Rebuild the source graph only on an actual mode/file switch — expensive
-   * (tears down and recreates the oscillator/audio element), audible click
-   * is expected here. */
+  /* Rebuild the source graph on an actual mode switch — expensive (tears
+   * down and recreates the oscillator/audio element), audible click is
+   * expected here. */
   useEffect(() => {
     audioEngineRef.current?.setSource(audioSourceMode, {
       fileUrl: uploadedFileUrl,
@@ -661,7 +672,17 @@ export default function Section1() {
       arpeggioMode,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioSourceMode, uploadedFileUrl]);
+  }, [audioSourceMode]);
+
+  /* Rebuild the source graph when the uploaded file changes — but ONLY while
+   * already in 'file' mode. Uploading a file while in tone/arpeggio mode
+   * must not touch the (currently playing) oscillator; the new file becomes
+   * relevant only once the user actually switches to 'file' mode, which the
+   * effect above already handles. */
+  useEffect(() => {
+    if (audioSourceModeRef.current !== 'file') return;
+    audioEngineRef.current?.setSource('file', { fileUrl: uploadedFileUrl });
+  }, [uploadedFileUrl]);
 
   /* Cheap live-parameter updates (e.g. dragging the frequency slider) that
    * must NOT tear down/recreate the oscillator. */
