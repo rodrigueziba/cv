@@ -742,15 +742,16 @@ export default function Section1() {
       );
       const insideCorridorPhase = finalPhaseProgress > 0;
 
-      // Title/space-prompt are otherwise controlled by React state that's
-      // independent of scroll depth (a wall-clock timer / audioActivated) —
-      // a fast scroll can carry either into the corridor view, overlapping
-      // the 3D scene. Force-hide imperatively while inside the corridor; on
-      // exit, restore based on the CURRENT live React state (via ref
-      // mirrors) rather than blindly clearing to '' — a blind clear would
-      // hand back whatever React's LAST render set, which is wrong if the
-      // title/prompt were already legitimately hidden (5s auto-hide timer /
-      // audioActivated) before the corridor was entered.
+      // Title/space-prompt are otherwise controlled by React state driven
+      // by signals other than corridor entry (the title's scroll-instance
+      // auto-hide / audioActivated) — a fast scroll can carry either into
+      // the corridor view, overlapping the 3D scene. Force-hide imperatively
+      // while inside the corridor; on exit, restore based on the CURRENT
+      // live React state (via ref mirrors) rather than blindly clearing to
+      // '' — a blind clear would hand back whatever React's LAST render
+      // set, which is wrong if the title/prompt were already legitimately
+      // hidden (scroll-instance auto-hide / audioActivated) before the
+      // corridor was entered.
       if (insideCorridorPhase !== wasInsideCorridorRef.current) {
         if (titleRef.current) {
           titleRef.current.style.opacity = insideCorridorPhase ? '0' : (titleVisibleRef.current ? '' : '0');
