@@ -5,6 +5,14 @@ import type { ArpeggioMode, AudioSourceMode } from '@/app/lib/SceneControlsConte
 
 const FILTER_GLIDE_SECONDS = 0.05;
 const PITCH_GLIDE_SECONDS = 0.08;
+const DEFAULT_MASTER_GAIN = 0.7;
+
+/** Vendor-prefixed pitch-preservation flags we disable so playbackRate audibly shifts pitch. */
+type PitchPreservingAudio = HTMLAudioElement & {
+  preservesPitch?: boolean;
+  mozPreservesPitch?: boolean;
+  webkitPreservesPitch?: boolean;
+};
 
 /**
  * Owns the entire Web Audio graph for the Doppler experience:
@@ -54,7 +62,7 @@ export class AudioEngine {
       highpass.frequency.value = AUDIO_CONFIG.highpassOpenHz;
 
       const masterGain = ctx.createGain();
-      masterGain.gain.value = 0.7;
+      masterGain.gain.value = DEFAULT_MASTER_GAIN;
 
       lowpass.connect(highpass);
       highpass.connect(masterGain);
@@ -109,14 +117,20 @@ export class AudioEngine {
       el.loop = true;
       el.crossOrigin = 'anonymous';
       // Pitch must move WITH playbackRate for the doppler effect to be audible.
-      (el as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = false;
-      (el as HTMLAudioElement & { mozPreservesPitch?: boolean }).mozPreservesPitch = false;
-      (el as HTMLAudioElement & { webkitPreservesPitch?: boolean }).webkitPreservesPitch = false;
+      const pitchPreservingEl = el as PitchPreservingAudio;
+      pitchPreservingEl.preservesPitch = false;
+      pitchPreservingEl.mozPreservesPitch = false;
+      pitchPreservingEl.webkitPreservesPitch = false;
       el.playbackRate = this.dopplerRate;
       const node = ctx.createMediaElementSource(el);
       node.connect(lowpass);
-      el.play().catch(() => {
-        /* blocked until resume() runs from a user gesture — retried by caller */
+      el.play().catch((err) => {
+        // NotAllowedError just means resume() hasn't run yet from a user gesture —
+        // retried by caller. Anything else (404, corrupt file, bad MIME) is a real
+        // failure and should surface a diagnostic instead of going silently mute.
+        if (err?.name !== 'NotAllowedError') {
+          console.warn('[AudioEngine] file source failed to play', err);
+        }
       });
       this.audioEl = el;
       this.mediaSourceNode = node;
@@ -143,6 +157,7 @@ export class AudioEngine {
     this.oscillator = osc;
     this.arpeggioIndex = 0;
     this.arpeggioTimer = setInterval(() => this.stepArpeggio(), AUDIO_CONFIG.arpeggioNoteMs);
+    // Fire the first note immediately rather than waiting for the first interval tick.
     this.stepArpeggio();
   }
 
@@ -209,5 +224,8 @@ export class AudioEngine {
     this.highpass?.disconnect();
     this.ctx?.close();
     this.ctx = null;
+    this.masterGain = null;
+    this.lowpass = null;
+    this.highpass = null;
   }
 }
