@@ -220,7 +220,8 @@ const FLOW_FRAG = /* glsl */`
     float vig = 1.0 - smoothstep(9.0, 30.0, length(wxz));
     color    *= 0.10 + vig * 0.96;
 
-    float holeMask = smoothstep(uHoleRadius * 0.7, uHoleRadius, length(wxz - uHoleCenter));
+    float holeR = max(uHoleRadius, 0.0001);
+    float holeMask = smoothstep(holeR * 0.7, holeR, length(wxz - uHoleCenter));
     gl_FragColor = vec4(color, holeMask);
   }
 `;
