@@ -39,7 +39,8 @@ import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTime
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
 import { AudioEngine } from '@/app/lib/audioEngine';
 import { stepContactAmount, stepFloorDopplerState, type DopplerFloorState } from '@/app/lib/audioMath';
-import { remapSubrange } from '@/app/lib/finalPhase';
+import { remapSubrange, corridorTravelDistance } from '@/app/lib/finalPhase';
+import { buildCorridor, type CorridorHandle } from '@/app/lib/corridor';
 
 /* ═══════════════════════════════════════════════════════════════
    SHADERS
@@ -347,6 +348,11 @@ export default function Section1() {
   // doesn't snap to an arbitrary axis while uDopplerCompress is still decaying.
   const lastSphereVelRef = useRef(new THREE.Vector2(1, 0));
 
+  // Corridor spawned once the floor hole finishes opening (Task 19); drives
+  // scroll-controlled sphere travel down its length.
+  const corridorRef = useRef<CorridorHandle | null>(null);
+  const prevTravelDistanceRef = useRef(0);
+
   // NOTE: must stay declared before the setSource/setToneFrequency/setArpeggioMode/
   // gesture-unlock effects below — React runs effect setup in declaration order, so
   // audioEngineRef.current must be assigned here before those effects can read it
@@ -609,30 +615,74 @@ export default function Section1() {
        * Lower-half Y constraint fades out as camera ascends to zenith,
        * releasing to full-range Y control by ~40% scroll.
        */
-      const mx = mouseRef.current.x;
-      const my = mouseRef.current.y; // +1 = top, −1 = bottom
+      const insideCorridorPhase = finalPhaseProgress > FINAL_PHASE_SUBRANGES.floorOpens.end;
+      let sphereSpeed: number;
 
-      /* Lower-half Y constraint fades to zero exactly at Phase 1 (progress=0.25) */
-      const constraintFade = Math.max(0, 1 - progress / 0.25);
-      const myPhase0 = my < 0 ? -my : 0;        // lower-half only
-      const myPhase3 = -my;                       // full range, inverted
-      const myInput  = myPhase0 * constraintFade + myPhase3 * (1 - constraintFade);
+      if (!insideCorridorPhase) {
+        /* ── Original disc/mouse-spring control (unchanged) ── */
+        const mx = mouseRef.current.x;
+        const my = mouseRef.current.y; // +1 = top, −1 = bottom
 
-      /* Rotate control frame by (progress × 90°) */
-      const angle = progress * Math.PI / 2;
-      const cosA  = Math.cos(angle);
-      const sinA  = Math.sin(angle);
-      const targetX = (mx * cosA - myInput * sinA) * MAX_X;
-      const targetZ = (mx * sinA + myInput * cosA) * MAX_Z;
+        /* Lower-half Y constraint fades to zero exactly at Phase 1 (progress=0.25) */
+        const constraintFade = Math.max(0, 1 - progress / 0.25);
+        const myPhase0 = my < 0 ? -my : 0;        // lower-half only
+        const myPhase3 = -my;                       // full range, inverted
+        const myInput  = myPhase0 * constraintFade + myPhase3 * (1 - constraintFade);
 
-      spring.vx  = spring.vx * SPRING_DAMP + (targetX - spring.x) * SPRING_K;
-      spring.vz  = spring.vz * SPRING_DAMP + (targetZ - spring.z) * SPRING_K;
-      spring.x  += spring.vx;
-      spring.z  += spring.vz;
+        /* Rotate control frame by (progress × 90°) */
+        const angle = progress * Math.PI / 2;
+        const cosA  = Math.cos(angle);
+        const sinA  = Math.sin(angle);
+        const targetX = (mx * cosA - myInput * sinA) * MAX_X;
+        const targetZ = (mx * sinA + myInput * cosA) * MAX_Z;
 
-      /* World-units/second speed → drives the doppler pitch shift (Task 13). */
-      const sphereSpeed = dt > 0 ? Math.sqrt(spring.vx * spring.vx + spring.vz * spring.vz) / dt : 0;
+        spring.vx  = spring.vx * SPRING_DAMP + (targetX - spring.x) * SPRING_K;
+        spring.vz  = spring.vz * SPRING_DAMP + (targetZ - spring.z) * SPRING_K;
+        spring.x  += spring.vx;
+        spring.z  += spring.vz;
+
+        /* Phase 0: tight clamp (half-Y, limited X).
+         * After Phase 0 (progress > 0.25): full disc range, no hard walls.
+         * The clamps lerp smoothly so there's no jump.                      */
+        const clampFade = Math.max(0, 1 - progress / 0.22);   // 0→1 fades by p=0.22
+        const clampX    = THREE.MathUtils.lerp(PLANE * 0.85, MAX_X, clampFade);
+        const clampZMin = THREE.MathUtils.lerp(-(PLANE * 0.85), 0, clampFade);
+        const clampZMax = PLANE * 0.85;
+        spring.x = THREE.MathUtils.clamp(spring.x, -clampX, clampX);
+        spring.z = THREE.MathUtils.clamp(spring.z, clampZMin, clampZMax);
+
+        sphere.position.x = spring.x;
+        sphere.position.z = spring.z;
+        sphere.position.y = SPHERE_R * 0.30; // sunken ~70% into the plane
+
+        /* World-units/second speed → drives the doppler pitch shift (Task 13). */
+        sphereSpeed = dt > 0 ? Math.sqrt(spring.vx * spring.vx + spring.vz * spring.vz) / dt : 0;
+      } else {
+        /* ── Corridor: mouse control frozen; travel driven by scroll ── */
+        if (!corridorRef.current) {
+          corridorRef.current = buildCorridor(
+            SPHERE_R,
+            sphere.position.clone(),
+            colorsRef.current.corridorWallStart,
+            colorsRef.current.corridorWallEnd
+          );
+          scene.add(corridorRef.current.group);
+        }
+        const corridor = corridorRef.current;
+        const corridorTravelT = remapSubrange(finalPhaseProgress, FINAL_PHASE_SUBRANGES.corridorTravel);
+        const travelDistance = corridorTravelDistance(corridorTravelT, corridor.length, SPHERE_R);
+
+        sphere.position.copy(corridor.entrance).addScaledVector(corridor.axis, travelDistance);
+        sphere.position.y = SPHERE_R * 0.30;
+
+        sphereSpeed = dt > 0 ? Math.abs(travelDistance - prevTravelDistanceRef.current) / dt : 0;
+        prevTravelDistanceRef.current = travelDistance;
+
+        corridor.patternUniforms.uTime.value = time;
+      }
+
       audioEngineRef.current?.setDopplerSpeed(sphereSpeed);
+      flowUniforms.uSphereXZ.value.set(sphere.position.x, sphere.position.z);
 
       /* Light-beam contact → progressive lowpass / highpass (Task 14). */
       const dxLow  = sphere.position.x - LIGHT_BEAMS.lowpass.position.x;
@@ -665,23 +715,6 @@ export default function Section1() {
       if (rawVelLen > 0.05) lastSphereVelRef.current.set(rawVelX, rawVelZ);
       flowUniforms.uSphereVel.value.copy(lastSphereVelRef.current);
       flowUniforms.uDopplerCompress.value = floorDopplerStateRef.current.intensity * FLOOR_DOPPLER_CONFIG.compressionStrength;
-
-      /* Phase 0: tight clamp (half-Y, limited X).
-       * After Phase 0 (progress > 0.25): full disc range, no hard walls.
-       * The clamps lerp smoothly so there's no jump.                      */
-      const clampFade = Math.max(0, 1 - progress / 0.22);   // 0→1 fades by p=0.22
-      const clampX    = THREE.MathUtils.lerp(PLANE * 0.85, MAX_X, clampFade);
-      const clampZMin = THREE.MathUtils.lerp(-(PLANE * 0.85), 0, clampFade);
-      const clampZMax = PLANE * 0.85;
-      spring.x = THREE.MathUtils.clamp(spring.x, -clampX, clampX);
-      spring.z = THREE.MathUtils.clamp(spring.z, clampZMin, clampZMax);
-
-      sphere.position.x = spring.x;
-      sphere.position.z = spring.z;
-      sphere.position.y = SPHERE_R * 0.30; // sunken ~70% into the plane
-
-      /* Pass sphere world XZ to shader for repulsion */
-      flowUniforms.uSphereXZ.value.set(spring.x, spring.z);
 
       /* Bloom reacts to progress: subtle at start, punchy at Phase 3 */
       bloom.strength = 0.12 + progress * 0.30;
@@ -755,6 +788,8 @@ export default function Section1() {
       starGeo.dispose();  starMat.dispose();
       beamLowpassMesh.geometry.dispose();  (beamLowpassMesh.material as THREE.Material).dispose();
       beamHighpassMesh.geometry.dispose(); (beamHighpassMesh.material as THREE.Material).dispose();
+      corridorRef.current?.dispose();
+      if (corridorRef.current) scene.remove(corridorRef.current.group);
       audioEngineRef.current?.dispose();
       audioEngineRef.current = null;
     };
