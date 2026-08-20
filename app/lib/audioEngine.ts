@@ -1,5 +1,5 @@
 import { AUDIO_CONFIG } from '@/app/lib/sceneConfig';
-import { lerpLog, speedToPlaybackRate } from '@/app/lib/audioMath';
+import { lerpLog, stepPitchEnvelope, type PitchEnvelopeState, type PitchEnvelopeConfig } from '@/app/lib/audioMath';
 import { withBasePath } from '@/app/lib/basePath';
 import type { ArpeggioMode, AudioSourceMode } from '@/app/lib/SceneControlsContext';
 
@@ -31,13 +31,17 @@ type PitchPreservingAudio = HTMLAudioElement & {
  * any sound is audible (browser autoplay policy).
  */
 export class AudioEngine {
+  constructor(private onFileSourceError?: () => void) {}
+
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private lowpass: BiquadFilterNode | null = null;
   private highpass: BiquadFilterNode | null = null;
 
   private mode: AudioSourceMode = 'tone';
-  private dopplerRate = 1; // smoothed playbackRate-equivalent multiplier
+  private pitchEnvelope: PitchEnvelopeState = { rate: 1, peakSpeed: 0, undershootTimer: 0 };
+  private pitchInertiaMultiplier = 1; // debug-menu-adjustable; scales all 3 envelope time constants
+  private playing = false;
 
   private audioEl: HTMLAudioElement | null = null;
   private mediaSourceNode: MediaElementAudioSourceNode | null = null;
@@ -62,7 +66,7 @@ export class AudioEngine {
       highpass.frequency.value = AUDIO_CONFIG.highpassOpenHz;
 
       const masterGain = ctx.createGain();
-      masterGain.gain.value = DEFAULT_MASTER_GAIN;
+      masterGain.gain.value = 0; // silent until setPlaying(true) — user activates via spacebar
 
       lowpass.connect(highpass);
       highpass.connect(masterGain);
@@ -83,7 +87,7 @@ export class AudioEngine {
     // If setSource('file', ...) ran before the context was resumed, its
     // el.play() call was rejected with NotAllowedError. Retry it now that
     // we're (hopefully) inside/after a user gesture.
-    if (this.audioEl && this.audioEl.paused) {
+    if (this.playing && this.audioEl && this.audioEl.paused) {
       this.audioEl.play().catch(() => {
         /* still blocked — e.g. browser requires play() itself inside the gesture handler (Safari) */
       });
@@ -124,15 +128,19 @@ export class AudioEngine {
       const el = new Audio(opts.fileUrl ?? withBasePath(AUDIO_CONFIG.defaultMp3Path));
       el.loop = true;
       el.crossOrigin = 'anonymous';
+      el.addEventListener('error', () => {
+        console.warn('[AudioEngine] file source failed to load', el.error);
+        this.onFileSourceError?.();
+      });
       // Pitch must move WITH playbackRate for the doppler effect to be audible.
       const pitchPreservingEl = el as PitchPreservingAudio;
       pitchPreservingEl.preservesPitch = false;
       pitchPreservingEl.mozPreservesPitch = false;
       pitchPreservingEl.webkitPreservesPitch = false;
-      el.playbackRate = this.dopplerRate;
+      el.playbackRate = this.pitchEnvelope.rate;
       const node = ctx.createMediaElementSource(el);
       node.connect(lowpass);
-      el.play().catch((err) => {
+      if (this.playing) el.play().catch((err) => {
         // NotAllowedError just means resume() hasn't run yet from a user gesture —
         // resume() retries el.play() itself once it does. Anything else (404,
         // corrupt file, bad MIME) is a real failure and should surface a
@@ -150,7 +158,7 @@ export class AudioEngine {
       this.baseToneFrequencyHz = opts.toneFrequencyHz ?? this.baseToneFrequencyHz;
       const osc = ctx.createOscillator();
       osc.type = 'sine';
-      osc.frequency.value = this.baseToneFrequencyHz * this.dopplerRate;
+      osc.frequency.value = this.baseToneFrequencyHz * this.pitchEnvelope.rate;
       osc.connect(lowpass);
       osc.start();
       this.oscillator = osc;
@@ -175,14 +183,14 @@ export class AudioEngine {
     const notes = AUDIO_CONFIG.arpeggioChords[this.arpeggioModeValue];
     const note = notes[this.arpeggioIndex % notes.length];
     this.arpeggioIndex++;
-    this.oscillator.frequency.setTargetAtTime(note * this.dopplerRate, this.ctx.currentTime, PITCH_GLIDE_SECONDS);
+    this.oscillator.frequency.setTargetAtTime(note * this.pitchEnvelope.rate, this.ctx.currentTime, PITCH_GLIDE_SECONDS);
   }
 
   /** Live-updates the tone frequency while in 'tone' mode (no-op otherwise). */
   setToneFrequency(hz: number): void {
     this.baseToneFrequencyHz = hz;
     if (this.mode === 'tone' && this.oscillator && this.ctx) {
-      this.oscillator.frequency.setTargetAtTime(hz * this.dopplerRate, this.ctx.currentTime, PITCH_GLIDE_SECONDS);
+      this.oscillator.frequency.setTargetAtTime(hz * this.pitchEnvelope.rate, this.ctx.currentTime, PITCH_GLIDE_SECONDS);
     }
   }
 
@@ -193,23 +201,57 @@ export class AudioEngine {
 
   /**
    * Called every animation frame with the current sphere speed
-   * (world units/sec). Maps to a playbackRate-equivalent multiplier
-   * and applies it to whichever source is active.
+   * (world units/sec) and the frame's delta time. Advances the pitch
+   * envelope (rise/fall inertia + post-deceleration undershoot — see
+   * app/lib/audioMath.ts stepPitchEnvelope) and applies the resulting
+   * rate to whichever source is active.
    */
-  setDopplerSpeed(speedUnitsPerSec: number): void {
-    const target = speedToPlaybackRate(speedUnitsPerSec, AUDIO_CONFIG);
-    this.dopplerRate += (target - this.dopplerRate) * AUDIO_CONFIG.dopplerSmoothing;
+  setDopplerSpeed(speedUnitsPerSec: number, dtSeconds: number): void {
+    const scaledCfg: PitchEnvelopeConfig = {
+      ...AUDIO_CONFIG,
+      dopplerRiseTimeConstant: AUDIO_CONFIG.dopplerRiseTimeConstant * this.pitchInertiaMultiplier,
+      dopplerFallTimeConstant: AUDIO_CONFIG.dopplerFallTimeConstant * this.pitchInertiaMultiplier,
+      dopplerUndershootTimeConstant: AUDIO_CONFIG.dopplerUndershootTimeConstant * this.pitchInertiaMultiplier,
+    };
+    this.pitchEnvelope = stepPitchEnvelope(this.pitchEnvelope, speedUnitsPerSec, dtSeconds, scaledCfg);
+    const rate = this.pitchEnvelope.rate;
 
     if (this.audioEl) {
-      this.audioEl.playbackRate = this.dopplerRate;
+      this.audioEl.playbackRate = rate;
     } else if (this.oscillator && this.ctx && this.mode === 'tone') {
       this.oscillator.frequency.setTargetAtTime(
-        this.baseToneFrequencyHz * this.dopplerRate,
+        this.baseToneFrequencyHz * rate,
         this.ctx.currentTime,
         PITCH_GLIDE_SECONDS
       );
     }
-    // Arpeggio mode picks up the new dopplerRate on its next stepArpeggio() tick.
+    // Arpeggio mode picks up the new rate on its next stepArpeggio() tick.
+  }
+
+  /** Debug-menu control: scales all 3 envelope time constants (rise, fall,
+   * undershoot). >1 = slower/more exaggerated transitions; <1 = snappier. */
+  setPitchInertiaMultiplier(multiplier: number): void {
+    this.pitchInertiaMultiplier = multiplier;
+  }
+
+  /**
+   * Play/pause toggle for whichever source is active. Mutes via
+   * `masterGain` (works uniformly for oscillators, which have no native
+   * pause) and additionally pauses/resumes the `<audio>` element in
+   * 'file' mode (saves CPU/bandwidth rather than just muting it).
+   */
+  setPlaying(playing: boolean): void {
+    this.playing = playing;
+    const { ctx } = this.ensureGraph();
+    this.masterGain?.gain.setTargetAtTime(playing ? DEFAULT_MASTER_GAIN : 0, ctx.currentTime, 0.12);
+    if (this.audioEl) {
+      if (playing) this.audioEl.play().catch(() => {});
+      else this.audioEl.pause();
+    }
+  }
+
+  isPlaying(): boolean {
+    return this.playing;
   }
 
   /** amount: 0 = fully open (no effect), 1 = only bass frequencies remain. */
