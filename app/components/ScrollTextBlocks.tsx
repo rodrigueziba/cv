@@ -12,6 +12,8 @@ import { useSceneControls } from '@/app/lib/SceneControlsContext';
  * and app/lib/sceneConfig.ts TEXT_BLOCKS for position/size/timing.
  */
 const ScrollTextBlocks = forwardRef<HTMLDivElement[], object>(function ScrollTextBlocks(_props, ref) {
+  // Note: transform:scale() also scales text-shadow, so this isn't fully
+  // independent from textBlockShadowSizeMultiplier — both compound together visually.
   const { textBlockFontSizeMultiplier, textBlockShadowSizeMultiplier, textBlockShadowIntensityMultiplier } =
     useSceneControls();
   return (
@@ -19,6 +21,14 @@ const ScrollTextBlocks = forwardRef<HTMLDivElement[], object>(function ScrollTex
       {TEXT_BLOCKS.map((block, i) => {
         const transformOrigin =
           block.textAlign === 'left' ? 'top left' : block.textAlign === 'right' ? 'top right' : 'top center';
+        // block.position may already carry its own transform (e.g. block-3's
+        // translateX(-50%) centering); combine rather than let the spread
+        // below clobber it. Translate first so centering stays correct at
+        // any scale value.
+        const positionTransform = block.position.transform;
+        const combinedTransform = positionTransform
+          ? `${positionTransform} scale(${textBlockFontSizeMultiplier})`
+          : `scale(${textBlockFontSizeMultiplier})`;
         return (
           <div
             key={block.id}
@@ -39,9 +49,9 @@ const ScrollTextBlocks = forwardRef<HTMLDivElement[], object>(function ScrollTex
               letterSpacing: block.letterSpacing,
               lineHeight: 1.6,
               textShadow: shadowToCss(block.shadow, textBlockShadowSizeMultiplier, textBlockShadowIntensityMultiplier),
-              transform: `scale(${textBlockFontSizeMultiplier})`,
               transformOrigin,
               ...block.position,
+              transform: combinedTransform, // explicitly last — overrides any block.position.transform, combining it with the scale instead of losing it
             }}
           >
             {block.lines.map((line, li) => (
