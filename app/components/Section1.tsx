@@ -352,6 +352,7 @@ export default function Section1() {
   // scroll-controlled sphere travel down its length.
   const corridorRef = useRef<CorridorHandle | null>(null);
   const prevTravelDistanceRef = useRef(0);
+  const wasInsideCorridorRef = useRef(false);
 
   // NOTE: must stay declared before the setSource/setToneFrequency/setArpeggioMode/
   // gesture-unlock effects below — React runs effect setup in declaration order, so
@@ -620,6 +621,16 @@ export default function Section1() {
 
       if (!insideCorridorPhase) {
         /* ── Original disc/mouse-spring control (unchanged) ── */
+        if (wasInsideCorridorRef.current) {
+          // Resume disc physics continuously from wherever the sphere actually
+          // was in the corridor, instead of snapping back to the frozen
+          // pre-corridor spring state.
+          spring.x = sphere.position.x;
+          spring.z = sphere.position.z;
+          spring.vx = 0;
+          spring.vz = 0;
+        }
+
         const mx = mouseRef.current.x;
         const my = mouseRef.current.y; // +1 = top, −1 = bottom
 
@@ -653,7 +664,6 @@ export default function Section1() {
 
         sphere.position.x = spring.x;
         sphere.position.z = spring.z;
-        sphere.position.y = SPHERE_R * 0.30; // sunken ~70% into the plane
 
         /* World-units/second speed → drives the doppler pitch shift (Task 13). */
         sphereSpeed = dt > 0 ? Math.sqrt(spring.vx * spring.vx + spring.vz * spring.vz) / dt : 0;
@@ -673,13 +683,18 @@ export default function Section1() {
         const travelDistance = corridorTravelDistance(corridorTravelT, corridor.length, SPHERE_R);
 
         sphere.position.copy(corridor.entrance).addScaledVector(corridor.axis, travelDistance);
-        sphere.position.y = SPHERE_R * 0.30;
 
+        if (!wasInsideCorridorRef.current) {
+          prevTravelDistanceRef.current = travelDistance; // fresh entry — no delta on the first frame
+        }
         sphereSpeed = dt > 0 ? Math.abs(travelDistance - prevTravelDistanceRef.current) / dt : 0;
         prevTravelDistanceRef.current = travelDistance;
 
         corridor.patternUniforms.uTime.value = time;
       }
+
+      sphere.position.y = SPHERE_R * 0.30; // sunken ~70% into the plane
+      wasInsideCorridorRef.current = insideCorridorPhase;
 
       audioEngineRef.current?.setDopplerSpeed(sphereSpeed);
       flowUniforms.uSphereXZ.value.set(sphere.position.x, sphere.position.z);
@@ -709,6 +724,9 @@ export default function Section1() {
       floorDopplerStateRef.current = stepFloorDopplerState(
         floorDopplerStateRef.current, floorEffectiveSpeed, dt, FLOOR_DOPPLER_CONFIG
       );
+      // NOTE: spring.vx/vz are frozen once inside the corridor phase — harmless today
+      // since the flow-mesh floor (which this drives) is already hidden by
+      // floorOpens.end === corridorTravel.start, but would need gating if that ever changes.
       const rawVelX = dt > 0 ? spring.vx / dt : 0;
       const rawVelZ = dt > 0 ? spring.vz / dt : 0;
       const rawVelLen = Math.sqrt(rawVelX * rawVelX + rawVelZ * rawVelZ);
@@ -790,6 +808,7 @@ export default function Section1() {
       beamHighpassMesh.geometry.dispose(); (beamHighpassMesh.material as THREE.Material).dispose();
       corridorRef.current?.dispose();
       if (corridorRef.current) scene.remove(corridorRef.current.group);
+      corridorRef.current = null;
       audioEngineRef.current?.dispose();
       audioEngineRef.current = null;
     };
