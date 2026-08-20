@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
 import { DEFAULT_SCENE_COLORS, COLOR_PALETTE_PRESETS, AUDIO_CONFIG, type SceneColorKey } from '@/app/lib/sceneConfig';
 
@@ -28,6 +28,7 @@ const COLOR_LABELS: Record<SceneColorKey, string> = {
  */
 export default function DebugMenu() {
   const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
   const {
     colors,
     setColor,
@@ -44,14 +45,8 @@ export default function DebugMenu() {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Shift' || e.repeat) return;
-      const target = e.target as HTMLElement | null;
-      const isEditable =
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable);
-      if (isEditable) return;
+      const target = e.target as Node | null;
+      if (target && panelRef.current?.contains(target)) return;
       setOpen((v) => !v);
     }
     window.addEventListener('keydown', onKeyDown);
@@ -62,6 +57,7 @@ export default function DebugMenu() {
 
   return (
     <div
+      ref={panelRef}
       style={{
         position: 'fixed',
         top: 16,
