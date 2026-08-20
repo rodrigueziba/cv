@@ -14,6 +14,11 @@ describe('remapSubrange', () => {
   it('is linear in between', () => {
     expect(remapSubrange(0.25, range)).toBeCloseTo(0.5, 5);
   });
+  it('acts as a step function at range.end for a zero-width range', () => {
+    const zeroWidth = { start: 0.5, end: 0.5 };
+    expect(remapSubrange(0.4999, zeroWidth)).toBe(0);
+    expect(remapSubrange(0.5, zeroWidth)).toBe(1);
+  });
 });
 
 describe('corridorTravelDistance', () => {
@@ -26,5 +31,8 @@ describe('corridorTravelDistance', () => {
   it('clamps t outside [0,1]', () => {
     expect(corridorTravelDistance(-1, 30, 0.75)).toBe(0);
     expect(corridorTravelDistance(2, 30, 0.75)).toBeCloseTo(29.25, 5);
+  });
+  it('is linear at the midpoint', () => {
+    expect(corridorTravelDistance(0.5, 30, 0.75)).toBeCloseTo(14.625, 5);
   });
 });
