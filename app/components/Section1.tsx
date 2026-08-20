@@ -32,6 +32,7 @@ import {
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
 import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTimeline';
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
+import { AudioEngine } from '@/app/lib/audioEngine';
 
 /* ═══════════════════════════════════════════════════════════════
    SHADERS
@@ -278,7 +279,7 @@ const SPH_FRAG = /* glsl */`
 ═══════════════════════════════════════════════════════════════ */
 
 export default function Section1() {
-  const { colors } = useSceneControls();
+  const { colors, audioSourceMode, toneFrequencyHz, arpeggioMode, uploadedFileUrl } = useSceneControls();
 
   const containerRef  = useRef<HTMLDivElement>(null);
   const mountRef      = useRef<HTMLDivElement>(null);
@@ -288,6 +289,7 @@ export default function Section1() {
   const mouseRef      = useRef({ x: 0, y: 0 });
   const textBlockRefs = useRef<HTMLDivElement[]>([]);
   const scrollInstanceRef = useRef(0); // raw scroll timeline position, in "instances"
+  const audioEngineRef = useRef<AudioEngine | null>(null);
 
   // Read by a later task's rAF-loop code (corridor construction) that needs the
   // CURRENT colors without the stale-closure problem `animate()`'s single
@@ -307,6 +309,8 @@ export default function Section1() {
     const container = containerRef.current;
     const W = window.innerWidth;
     const H = window.innerHeight;
+
+    audioEngineRef.current = new AudioEngine();
 
     /* ── Renderer ───────────────────────────────────────────────── */
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -609,6 +613,27 @@ export default function Section1() {
       planeGeo.dispose(); flowMat.dispose();
       sphGeo.dispose();   sphMat.dispose();
       starGeo.dispose();  starMat.dispose();
+      audioEngineRef.current?.dispose();
+      audioEngineRef.current = null;
+    };
+  }, []);
+
+  /* Unlock the AudioContext on the first user gesture — browsers block
+   * autoplay until then. Removes its own listeners after the first fire. */
+  useEffect(() => {
+    function unlock() {
+      audioEngineRef.current?.resume();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('wheel', unlock);
+    }
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+    window.addEventListener('wheel', unlock, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('wheel', unlock);
     };
   }, []);
 
@@ -625,6 +650,28 @@ export default function Section1() {
     sphUniformsRef.current?.uChromeHighlight.value.set(colors.sphereChromeHighlight);
     starUniformsRef.current?.uStarTint.value.set(colors.starColor);
   }, [colors]);
+
+  /* Rebuild the source graph only on an actual mode/file switch — expensive
+   * (tears down and recreates the oscillator/audio element), audible click
+   * is expected here. */
+  useEffect(() => {
+    audioEngineRef.current?.setSource(audioSourceMode, {
+      fileUrl: uploadedFileUrl,
+      toneFrequencyHz,
+      arpeggioMode,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioSourceMode, uploadedFileUrl]);
+
+  /* Cheap live-parameter updates (e.g. dragging the frequency slider) that
+   * must NOT tear down/recreate the oscillator. */
+  useEffect(() => {
+    audioEngineRef.current?.setToneFrequency(toneFrequencyHz);
+  }, [toneFrequencyHz]);
+
+  useEffect(() => {
+    audioEngineRef.current?.setArpeggioMode(arpeggioMode);
+  }, [arpeggioMode]);
 
   /* Scroll runway size — enough for the intro, all 5 text blocks, and the
    * final zoom/corridor phase, plus a 1-instance settle buffer at the end. */
