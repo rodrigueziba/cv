@@ -897,6 +897,7 @@ export default function Section1() {
       if (titleHideTimerRef.current !== null) clearTimeout(titleHideTimerRef.current);
       titleHideTimerArmedRef.current = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* Unlock the AudioContext on the first user gesture — browsers block
@@ -947,6 +948,7 @@ export default function Section1() {
     }
     window.addEventListener('keydown', onSpaceKey);
     return () => window.removeEventListener('keydown', onSpaceKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* Push debug-menu color changes into the live shader uniforms. Runs on
