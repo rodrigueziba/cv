@@ -9,10 +9,12 @@ const PATTERN_VERT = /* glsl */ `
   uniform float uLength;
   varying float vPatternT; // 0 at the entrance, 1 at the end wall
   varying vec2  vSurfaceUV;
+  varying vec3  vNormal;
   void main() {
     float groupLocalZ = uMeshOffsetZ + position.z;
     vPatternT   = clamp(-groupLocalZ / uLength, 0.0, 1.0);
     vSurfaceUV  = position.xy;
+    vNormal     = normalize(normalMatrix * normal);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
@@ -27,6 +29,7 @@ const PATTERN_FRAG = /* glsl */ `
   uniform vec3  uSolidColor;
   varying float vPatternT;
   varying vec2  vSurfaceUV;
+  varying vec3  vNormal;
   void main() {
     float n       = fbm(vSurfaceUV * 0.15 + vec2(uTime * 0.05, 0.0));
     float lines   = smoothstep(0.45, 0.50, fract(n * 6.0 + uTime * 0.1));
@@ -34,6 +37,15 @@ const PATTERN_FRAG = /* glsl */ `
     vec3  patterned = mix(vec3(0.02, 0.02, 0.05), patCol, lines);
     float toSolid = smoothstep(uPatternedPortion * 0.85, uPatternedPortion, vPatternT);
     vec3  color   = mix(patterned, uSolidColor, toSolid);
+    // Simple fake directional lighting so floor/ceiling/walls read as
+    // distinct 3D surfaces instead of one flat, unlit color fill — this
+    // is what makes the corridor actually look like a tunnel rather than
+    // a colored void for the ~80% of its length past the patterned zone.
+    vec3  N       = normalize(vNormal);
+    vec3  lightDir = normalize(vec3(0.4, 1.0, 0.3));
+    float ndotl   = max(dot(N, lightDir), 0.0);
+    float shade   = 0.45 + 0.55 * ndotl; // ambient floor + directional term
+    color        *= shade;
     gl_FragColor  = vec4(color, 1.0);
   }
 `;
