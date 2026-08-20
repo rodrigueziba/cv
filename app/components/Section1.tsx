@@ -904,9 +904,22 @@ export default function Section1() {
         // we'd project against last frame's camera transform.
         camera.updateMatrixWorld();
         const projected = corridor.endWallCenter.clone().project(camera);
+        // Also project the wall's left/right edges (not just its center)
+        // so the link text can be given a pixel-accurate max-width with a
+        // real margin — it should never touch the wall's physical edges,
+        // regardless of viewing distance/angle. Using 0.42 (rather than
+        // the true half-width fraction 0.5) as the edge offset already
+        // bakes an ~8%-per-side margin into the measurement itself.
+        const EDGE_FRACTION = 0.42;
+        const leftEdge2D  = corridor.endWallCenter.clone()
+          .add(new THREE.Vector3(-corridor.crossSection * EDGE_FRACTION, 0, 0)).project(camera);
+        const rightEdge2D = corridor.endWallCenter.clone()
+          .add(new THREE.Vector3( corridor.crossSection * EDGE_FRACTION, 0, 0)).project(camera);
+        const wallWidthPx = Math.abs(rightEdge2D.x - leftEdge2D.x) * 0.5 * window.innerWidth;
         if (endLinkRef.current) {
           endLinkRef.current.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
           endLinkRef.current.style.top  = `${(-projected.y * 0.5 + 0.5) * window.innerHeight}px`;
+          endLinkRef.current.style.maxWidth = `${Math.max(120, wallWidthPx)}px`;
           const reached = corridorTravelT >= CORRIDOR_CONFIG.reachedThreshold;
           endLinkRef.current.style.opacity = reached ? '1' : '0';
           endLinkRef.current.style.pointerEvents = reached ? 'auto' : 'none';
@@ -1243,7 +1256,6 @@ export default function Section1() {
             textTransform: 'uppercase',
             textShadow: '2.2px 2.2px 0px rgba(0,0,0,0.85)',
             textDecoration: 'none',
-            whiteSpace: 'nowrap',
           }}
         >
           {CORRIDOR_CONFIG.finalLinkText}
