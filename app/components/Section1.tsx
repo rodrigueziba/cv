@@ -741,12 +741,14 @@ export default function Section1() {
       // a fast scroll can carry either into the corridor view, overlapping
       // the 3D scene. Force-hide imperatively while inside the corridor;
       // clearing to '' on exit hands control back to React's own styling.
-      if (titleRef.current) {
-        titleRef.current.style.opacity = insideCorridorPhase ? '0' : '';
-        titleRef.current.style.animation = insideCorridorPhase ? 'none' : '';
-      }
-      if (spacePromptRef.current) {
-        spacePromptRef.current.style.opacity = insideCorridorPhase ? '0' : '';
+      if (insideCorridorPhase !== wasInsideCorridorRef.current) {
+        if (titleRef.current) {
+          titleRef.current.style.opacity = insideCorridorPhase ? '0' : '';
+          titleRef.current.style.animation = insideCorridorPhase ? 'none' : '';
+        }
+        if (spacePromptRef.current) {
+          spacePromptRef.current.style.opacity = insideCorridorPhase ? '0' : '';
+        }
       }
 
       /*
