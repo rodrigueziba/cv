@@ -165,7 +165,7 @@ const FLOW_FRAG = /* glsl */`
     vec2  velDir   = velLen > 0.0001 ? uSphereVel / velLen : vec2(1.0, 0.0);
     vec2  towardFrag = length(delta) > 0.0001 ? normalize(delta) : vec2(1.0, 0.0);
     float along    = dot(towardFrag, velDir); // +1 ahead of motion, -1 behind
-    float dopplerFalloff = 1.0 - smoothstep(0.0, R * 8.0, r); // 1 near the sphere, fades to 0 far away
+    float dopplerFalloff = 1.0 - smoothstep(0.0, R * 5.0, r); // was R*8.0 — starker near/far contrast
     float lineFreq = 7.0 + along * uDopplerCompress * dopplerFalloff;
     float lw       = 0.095;                             /* thin lines */
     float drift    = t * 0.18;                          /* slow drift */
@@ -319,6 +319,8 @@ export default function Section1() {
     isPlaying,
     setIsPlaying,
     pitchInertiaMultiplier,
+    floorDopplerIntensityMultiplier,
+    floorDopplerInertiaMultiplier,
   } = useSceneControls();
 
   const [titleVisible, setTitleVisible] = useState(true);
@@ -373,6 +375,18 @@ export default function Section1() {
   // sphere is momentarily still so the compression pattern's orientation
   // doesn't snap to an arbitrary axis while uDopplerCompress is still decaying.
   const lastSphereVelRef = useRef(new THREE.Vector2(1, 0));
+
+  // Debug multipliers for the floor-doppler effect — read inside animate()'s
+  // []-dep closure, so mirrored into refs following the colorsRef pattern.
+  const floorDopplerIntensityMultRef = useRef(floorDopplerIntensityMultiplier);
+  useEffect(() => {
+    floorDopplerIntensityMultRef.current = floorDopplerIntensityMultiplier;
+  }, [floorDopplerIntensityMultiplier]);
+
+  const floorDopplerInertiaMultRef = useRef(floorDopplerInertiaMultiplier);
+  useEffect(() => {
+    floorDopplerInertiaMultRef.current = floorDopplerInertiaMultiplier;
+  }, [floorDopplerInertiaMultiplier]);
 
   // Corridor spawned once the floor hole finishes opening (Task 19); drives
   // scroll-controlled sphere travel down its length.
@@ -762,20 +776,29 @@ export default function Section1() {
       /* Floor doppler wave compression — only "active" (camera far from the
        * scenario) at/after FLOOR_DOPPLER_MIN_CAMERA_PROGRESS; forcing speed
        * to 0 below that threshold lets the hold+release curve ease it out
-       * naturally instead of an abrupt cut. */
+       * naturally instead of an abrupt cut. Inertia multiplier scales
+       * hold+release duration; intensity multiplier scales the final
+       * compression strength (kept separate from the state machine's own
+       * timing so scaling "how strong" never distorts "how long"). */
       const floorEffectiveSpeed = progress >= FLOOR_DOPPLER_MIN_CAMERA_PROGRESS ? sphereSpeed : 0;
+      const scaledFloorDopplerCfg = {
+        compressionStrength: FLOOR_DOPPLER_CONFIG.compressionStrength,
+        riseRate: FLOOR_DOPPLER_CONFIG.riseRate,
+        holdSeconds: FLOOR_DOPPLER_CONFIG.holdSeconds * floorDopplerInertiaMultRef.current,
+        releaseSeconds: FLOOR_DOPPLER_CONFIG.releaseSeconds * floorDopplerInertiaMultRef.current,
+      };
       floorDopplerStateRef.current = stepFloorDopplerState(
-        floorDopplerStateRef.current, floorEffectiveSpeed, dt, FLOOR_DOPPLER_CONFIG
+        floorDopplerStateRef.current, floorEffectiveSpeed, dt, scaledFloorDopplerCfg
       );
       // NOTE: spring.vx/vz are frozen once inside the corridor phase — harmless today
-      // since the flow-mesh floor (which this drives) is already hidden by
-      // floorOpens.end === corridorTravel.start, but would need gating if that ever changes.
+      // since the flow-mesh floor (which this drives) is not visible from the corridor.
       const rawVelX = dt > 0 ? spring.vx / dt : 0;
       const rawVelZ = dt > 0 ? spring.vz / dt : 0;
       const rawVelLen = Math.sqrt(rawVelX * rawVelX + rawVelZ * rawVelZ);
       if (rawVelLen > 0.05) lastSphereVelRef.current.set(rawVelX, rawVelZ);
       flowUniforms.uSphereVel.value.copy(lastSphereVelRef.current);
-      flowUniforms.uDopplerCompress.value = floorDopplerStateRef.current.intensity * FLOOR_DOPPLER_CONFIG.compressionStrength;
+      flowUniforms.uDopplerCompress.value =
+        floorDopplerStateRef.current.intensity * FLOOR_DOPPLER_CONFIG.compressionStrength * floorDopplerIntensityMultRef.current;
 
       /* Bloom reacts to progress: subtle at start, punchy at Phase 3 */
       bloom.strength = 0.12 + progress * 0.30;
