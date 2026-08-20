@@ -129,6 +129,7 @@ export class AudioEngine {
       el.loop = true;
       el.crossOrigin = 'anonymous';
       el.addEventListener('error', () => {
+        if (this.audioEl !== el) return; // stale — this source was already torn down/replaced
         console.warn('[AudioEngine] file source failed to load', el.error);
         this.onFileSourceError?.();
       });
