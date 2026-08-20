@@ -310,10 +310,11 @@ export default function Section1() {
   const sphUniformsRef  = useRef<Record<string, THREE.IUniform> | null>(null);
   const starUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
 
-  // NOTE: must be declared before the setSource/setToneFrequency/setArpeggioMode/
-  // gesture-unlock effects below — this effect's cleanup (dispose()) must run
-  // LAST (React runs cleanups in reverse declaration order), tearing down
-  // whatever those other effects built into the audio graph.
+  // NOTE: must stay declared before the setSource/setToneFrequency/setArpeggioMode/
+  // gesture-unlock effects below — React runs effect setup in declaration order, so
+  // audioEngineRef.current must be assigned here before those effects can read it
+  // on initial mount. (Not about cleanup order — React runs cleanups in the same
+  // forward order too, not reverse.)
   useEffect(() => {
     if (!mountRef.current || !containerRef.current) return;
     const mount     = mountRef.current;
