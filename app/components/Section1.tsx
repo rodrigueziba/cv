@@ -589,6 +589,37 @@ export default function Section1() {
     });
     scene.add(new THREE.Points(starGeo, starMat));
 
+    /* ── Corridor-entrance star field ──────────────────────────────
+     * The disc star field above is anchored near world Y∈[0,80] around
+     * the main scenario — far above the corridor (CORRIDOR_CONFIG.yOffset
+     * = -80), so it's never in view once the camera teleports down there.
+     * This is a second, smaller field positioned in the corridor's own
+     * local space (added as a child of corridor.group, so it moves with
+     * it automatically), reusing the SAME material/uniforms as the disc
+     * field — same shader, same random-brightness twinkle, for free —
+     * just different geometry/positions. Placed above and a bit behind
+     * the tunnel entrance (local +Z, since the tunnel extends toward -Z),
+     * matching where the very first corridor-phase camera position
+     * (behind + above the sphere, chase-cam) actually looks. */
+    const CORRIDOR_STAR_COUNT = 200;
+    const csPosArr   = new Float32Array(CORRIDOR_STAR_COUNT * 3);
+    const csPhaseArr = new Float32Array(CORRIDOR_STAR_COUNT);
+    const csSizeArr  = new Float32Array(CORRIDOR_STAR_COUNT);
+    for (let i = 0; i < CORRIDOR_STAR_COUNT; i++) {
+      const theta  = Math.random() * Math.PI * 2;
+      const radius = 4 + Math.random() * 22;
+      csPosArr[i*3]   = Math.cos(theta) * radius;
+      csPosArr[i*3+1] = corridor.crossSection + 3 + Math.random() * 18;
+      csPosArr[i*3+2] = Math.sin(theta) * radius + corridor.crossSection * 1.5;
+      csPhaseArr[i]   = Math.random();
+      csSizeArr[i]    = 2.5 + Math.random() * 4.5;
+    }
+    const corridorStarGeo = new THREE.BufferGeometry();
+    corridorStarGeo.setAttribute('position', new THREE.BufferAttribute(csPosArr,   3));
+    corridorStarGeo.setAttribute('aPhase',   new THREE.BufferAttribute(csPhaseArr, 1));
+    corridorStarGeo.setAttribute('aSize',    new THREE.BufferAttribute(csSizeArr,  1));
+    corridor.group.add(new THREE.Points(corridorStarGeo, starMat));
+
     /* ── Post-processing ────────────────────────────────────────── */
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
@@ -1025,6 +1056,7 @@ export default function Section1() {
       planeGeo.dispose(); flowMat.dispose();
       sphGeo.dispose();   sphMat.dispose();
       starGeo.dispose();  starMat.dispose();
+      corridorStarGeo.dispose();
       corridor.dispose();
       scene.remove(corridor.group);
       corridorRef.current = null;
