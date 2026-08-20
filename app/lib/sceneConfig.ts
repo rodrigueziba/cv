@@ -282,6 +282,7 @@ export const CORRIDOR_CONFIG = {
   // source of truth the debug menu's color pickers also read/write.
   finalLinkText: 'IR A LA SIMULACION',
   finalLinkUrl: 'https://efectodoppler.vercel.app',
+  reachedThreshold: 0.97, // corridorTravelT at/above which the sphere is considered "arrived" at the end wall
 };
 
 /* ── 10) SHARED FONT ────────────────────────────────────────────── */

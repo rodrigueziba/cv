@@ -673,6 +673,8 @@ export default function Section1() {
         if (endLinkRef.current) {
           endLinkRef.current.style.opacity = '0';
           endLinkRef.current.style.pointerEvents = 'none';
+          endLinkRef.current.tabIndex = -1;
+          endLinkRef.current.setAttribute('aria-hidden', 'true');
         }
       } else {
         /* ── Corridor: mouse control frozen; travel driven by scroll ── */
@@ -700,13 +702,25 @@ export default function Section1() {
         corridor.patternUniforms.uTime.value = time;
         corridor.endWallUniforms.uColorT.value = corridorTravelT;
 
+        // .project(camera) relies on camera.matrixWorldInverse, which is normally
+        // refreshed by composer.render() — but that runs AFTER this point in the
+        // frame, so without an explicit update here we'd project against last
+        // frame's camera transform. Force it current first.
+        camera.updateMatrixWorld();
+        // Projected position is expected to be unstable/off-screen for most of the
+        // traversal — camera.updateMatrixWorld() above keeps it accurate, but the
+        // end wall is often near/behind the view frustum boundary until the sphere
+        // gets close. Harmless: opacity/pointerEvents/tabIndex all gate visibility
+        // + interactivity until `reached`.
         const projected = corridor.endWallCenter.clone().project(camera);
         if (endLinkRef.current) {
           endLinkRef.current.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
           endLinkRef.current.style.top  = `${(-projected.y * 0.5 + 0.5) * window.innerHeight}px`;
-          const reached = corridorTravelT >= 0.97;
+          const reached = corridorTravelT >= CORRIDOR_CONFIG.reachedThreshold;
           endLinkRef.current.style.opacity = reached ? '1' : '0';
           endLinkRef.current.style.pointerEvents = reached ? 'auto' : 'none';
+          endLinkRef.current.tabIndex = reached ? 0 : -1;
+          endLinkRef.current.setAttribute('aria-hidden', reached ? 'false' : 'true');
         }
       }
 
@@ -941,6 +955,8 @@ export default function Section1() {
           href={CORRIDOR_CONFIG.finalLinkUrl}
           target="_blank"
           rel="noopener noreferrer"
+          tabIndex={-1}
+          aria-hidden="true"
           style={{
             position: 'absolute',
             left: 0,
