@@ -5,8 +5,8 @@ const repoBase =
   process.env.GITHUB_PAGES_BASE_PATH ?? "/cv";
 
 const nextConfig: NextConfig = {
-  output: "export", // Genera la carpeta /out con HTML/CSS/JS estáticos
-  basePath: process.env.NODE_ENV === "production" ? repoBase : "",
+  
+  
   env: {
     // Mirrors basePath so client code (audio/asset URLs) can prefix correctly.
     NEXT_PUBLIC_BASE_PATH: process.env.NODE_ENV === "production" ? repoBase : "",
