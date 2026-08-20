@@ -14,7 +14,7 @@
  *  80 – 100% │ Rotated 90° — flow appears to rise bottom → top
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -34,6 +34,8 @@ import {
   FLOOR_DOPPLER_CONFIG,
   FLOOR_DOPPLER_MIN_CAMERA_PROGRESS,
   CORRIDOR_CONFIG,
+  SPACE_PROMPT_CONFIG,
+  TITLE_HIDE_DELAY_SECONDS,
 } from '@/app/lib/sceneConfig';
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
 import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTimeline';
@@ -302,7 +304,11 @@ const SPH_FRAG = /* glsl */`
 ═══════════════════════════════════════════════════════════════ */
 
 export default function Section1() {
-  const { colors, audioSourceMode, toneFrequencyHz, arpeggioMode, uploadedFileUrl } = useSceneControls();
+  const { colors, audioSourceMode, toneFrequencyHz, arpeggioMode, uploadedFileUrl, audioActivated } = useSceneControls();
+
+  const [titleVisible, setTitleVisible] = useState(true);
+  const titleHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const titleHideTimerArmedRef = useRef(false);
 
   const containerRef  = useRef<HTMLDivElement>(null);
   const mountRef      = useRef<HTMLDivElement>(null);
@@ -794,6 +800,20 @@ export default function Section1() {
       // then held at 1 (matches the existing "fixed camera" final look) until
       // the final zoom phase (a later task) takes over.
       scrollRef.current = Math.max(0, Math.min(1, instance / INTRO_CAMERA_INSTANCES));
+
+      if (instance <= 0.01) {
+        // Back at the very top — cancel any pending hide, show the title immediately,
+        // and disarm so the NEXT scroll-away restarts a fresh 5-second countdown.
+        if (titleHideTimerRef.current !== null) {
+          clearTimeout(titleHideTimerRef.current);
+          titleHideTimerRef.current = null;
+        }
+        titleHideTimerArmedRef.current = false;
+        setTitleVisible(true);
+      } else if (!titleHideTimerArmedRef.current) {
+        titleHideTimerArmedRef.current = true;
+        titleHideTimerRef.current = setTimeout(() => setTitleVisible(false), TITLE_HIDE_DELAY_SECONDS * 1000);
+      }
     }
 
     function onMouse(e: MouseEvent) {
@@ -842,6 +862,7 @@ export default function Section1() {
       corridorRef.current = null;
       audioEngineRef.current?.dispose();
       audioEngineRef.current = null;
+      if (titleHideTimerRef.current !== null) clearTimeout(titleHideTimerRef.current);
     };
   }, []);
 
@@ -1011,7 +1032,9 @@ export default function Section1() {
             textTransform: 'uppercase',
             userSelect:    'none',
             pointerEvents: 'none',
-            animation:     'titlePulse 4s ease-in-out infinite',
+            opacity:       titleVisible ? undefined : 0,
+            transition:    'opacity 1s ease',
+            animation:     titleVisible ? 'titlePulse 4s ease-in-out infinite' : 'none',
             textShadow:    shadowToCss(TITLE_CONFIG.shadow),
           }}
         >
@@ -1045,6 +1068,33 @@ export default function Section1() {
           <span>scroll</span>
           <span style={{ animation: 'currentsArrow 2.4s ease-in-out infinite', display: 'block' }}>↓</span>
         </div>
+
+        {/* ── Press-space-to-activate-audio prompt — mirrors the scroll indicator's styling ── */}
+        {!audioActivated && (
+          <div
+            style={{
+              position:      'absolute',
+              bottom:        SPACE_PROMPT_CONFIG.bottomPosition,
+              left:          '50%',
+              transform:     'translateX(-50%)',
+              zIndex:        10,
+              color:         'rgba(210, 170, 255, 0.60)',
+              fontFamily:    '"Helvetica Neue", Helvetica, Arial, sans-serif',
+              fontSize:      '9px',
+              fontWeight:    700,
+              letterSpacing: '0.30em',
+              textTransform: 'uppercase',
+              textAlign:     'center',
+              userSelect:    'none',
+              pointerEvents: 'none',
+              transition:    'opacity 0.4s ease',
+              whiteSpace:    'nowrap',
+              padding:       '0 16px',
+            }}
+          >
+            {SPACE_PROMPT_CONFIG.text}
+          </div>
+        )}
       </div>
     </div>
   );
