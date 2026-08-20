@@ -461,8 +461,8 @@ export default function Section1() {
       scene.add(mesh);
       return mesh;
     }
-    const beamLowpassMesh = makeBeam(LIGHT_BEAMS.lowpass.position.x, LIGHT_BEAMS.lowpass.position.z, colors.beamLowpass);
-    const beamHighpassMesh = makeBeam(LIGHT_BEAMS.highpass.position.x, LIGHT_BEAMS.highpass.position.z, colors.beamHighpass);
+    const beamLowpassMesh = makeBeam(LIGHT_BEAMS.lowpass.position.x, LIGHT_BEAMS.lowpass.position.z, DEFAULT_SCENE_COLORS.beamLowpass);
+    const beamHighpassMesh = makeBeam(LIGHT_BEAMS.highpass.position.x, LIGHT_BEAMS.highpass.position.z, DEFAULT_SCENE_COLORS.beamHighpass);
     beamLowpassMeshRef.current  = beamLowpassMesh;
     beamHighpassMeshRef.current = beamHighpassMesh;
 
