@@ -27,6 +27,7 @@ import {
   INTRO_CAMERA_INSTANCES,
   FINAL_PHASE_START_INSTANCE,
   FINAL_PHASE_DURATION_INSTANCES,
+  FINAL_PHASE_SUBRANGES,
   DEFAULT_SCENE_COLORS,
   LIGHT_BEAMS,
   AUDIO_CONFIG,
@@ -38,6 +39,7 @@ import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTime
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
 import { AudioEngine } from '@/app/lib/audioEngine';
 import { stepContactAmount, stepFloorDopplerState, type DopplerFloorState } from '@/app/lib/audioMath';
+import { remapSubrange } from '@/app/lib/finalPhase';
 
 /* ═══════════════════════════════════════════════════════════════
    SHADERS
@@ -110,6 +112,8 @@ const FLOW_FRAG = /* glsl */`
   uniform vec3  uNearGlow;
   uniform vec2  uSphereVel;
   uniform float uDopplerCompress;
+  uniform vec2  uHoleCenter;
+  uniform float uHoleRadius;
 
   varying vec3 vWorldPos;
 
@@ -216,7 +220,8 @@ const FLOW_FRAG = /* glsl */`
     float vig = 1.0 - smoothstep(9.0, 30.0, length(wxz));
     color    *= 0.10 + vig * 0.96;
 
-    gl_FragColor = vec4(color, 1.0);
+    float holeMask = smoothstep(uHoleRadius * 0.7, uHoleRadius, length(wxz - uHoleCenter));
+    gl_FragColor = vec4(color, holeMask);
   }
 `;
 
@@ -326,6 +331,7 @@ export default function Section1() {
   const starUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
   const beamLowpassMeshRef  = useRef<THREE.Mesh | null>(null);
   const beamHighpassMeshRef = useRef<THREE.Mesh | null>(null);
+  const flowMeshRef = useRef<THREE.Mesh | null>(null);
 
   // Progressive [0,1] contact amount for each light beam's audio filter,
   // ramped/released every frame in animate() (Task 14).
@@ -394,6 +400,8 @@ export default function Section1() {
       uNearGlow:     { value: new THREE.Color(DEFAULT_SCENE_COLORS.flowNearSphereGlow) },
       uSphereVel:       { value: new THREE.Vector2(0, 0) },
       uDopplerCompress: { value: 0 },
+      uHoleCenter: { value: new THREE.Vector2(0, 0) },
+      uHoleRadius: { value: 0 },
     };
     flowUniformsRef.current = flowUniforms;
     const flowMat  = new THREE.ShaderMaterial({
@@ -401,8 +409,11 @@ export default function Section1() {
       fragmentShader: FLOW_FRAG,
       uniforms:       flowUniforms,
       side:           THREE.DoubleSide,
+      transparent:    true,
     });
-    scene.add(new THREE.Mesh(planeGeo, flowMat));
+    const flowMesh = new THREE.Mesh(planeGeo, flowMat);
+    scene.add(flowMesh);
+    flowMeshRef.current = flowMesh;
 
     /* ── Sphere ─────────────────────────────────────────────────── */
     const sphGeo = new THREE.SphereGeometry(SPHERE_R, 64, 64);
@@ -533,6 +544,19 @@ export default function Section1() {
       camera.lookAt(tx, ty, tz);
     }
 
+    const FINAL_CLOSE_OFFSET = new THREE.Vector3(SPHERE_R * 3.0, SPHERE_R * 1.3, 0);
+    const HOLE_MAX_RADIUS = 34;
+
+    function applyFinalPhaseCamera(finalProgress: number, spherePos: THREE.Vector3) {
+      const zoomT = ease(remapSubrange(finalProgress, FINAL_PHASE_SUBRANGES.zoomToSphere));
+      const startPos    = new THREE.Vector3(...CAM[3].pos);
+      const startTarget = new THREE.Vector3(...CAM[3].target);
+      const dynamicPos  = spherePos.clone().add(FINAL_CLOSE_OFFSET);
+      camera.position.copy(startPos.clone().lerp(dynamicPos, zoomT));
+      camera.up.set(...CAM[3].up).normalize();
+      camera.lookAt(startTarget.clone().lerp(spherePos, zoomT));
+    }
+
     /* ── Spring physics for sphere following mouse ───────────────── */
     const spring = { x: 0, z: 0, vx: 0, vz: 0 };
     const SPRING_K    = 0.22;  // faster follow
@@ -558,7 +582,21 @@ export default function Section1() {
       starUniforms.uTime.value     = time;
 
       /* Camera transition */
-      applyCamKeyframes(progress);
+      const instance = scrollInstanceRef.current;
+      const finalPhaseProgress = remapSubrange(
+        instance,
+        { start: FINAL_PHASE_START_INSTANCE, end: FINAL_PHASE_START_INSTANCE + FINAL_PHASE_DURATION_INSTANCES }
+      );
+      if (finalPhaseProgress <= 0) {
+        applyCamKeyframes(progress);
+      } else {
+        applyFinalPhaseCamera(finalPhaseProgress, sphere.position);
+      }
+
+      const holeT = remapSubrange(finalPhaseProgress, FINAL_PHASE_SUBRANGES.floorOpens);
+      flowUniforms.uHoleCenter.value.set(sphere.position.x, sphere.position.z);
+      flowUniforms.uHoleRadius.value = holeT * HOLE_MAX_RADIUS;
+      if (flowMeshRef.current) flowMeshRef.current.visible = holeT < 1;
 
       /*
        * Progressive mouse control rotation
@@ -655,7 +693,6 @@ export default function Section1() {
       }
 
       /* Scroll-timed text block opacity (imperative — avoids per-frame re-render) */
-      const instance = scrollInstanceRef.current;
       TEXT_BLOCKS.forEach((block, i) => {
         const el = textBlockRefs.current[i];
         if (el) el.style.opacity = String(computeBlockOpacity(instance, block.startInstance));
