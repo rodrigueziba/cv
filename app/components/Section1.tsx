@@ -972,7 +972,7 @@ export default function Section1() {
             letterSpacing: '0.18em',
             textAlign: 'center',
             textTransform: 'uppercase',
-            textShadow: '2px 2px 0px rgba(0,0,0,0.85)',
+            textShadow: '2.2px 2.2px 0px rgba(0,0,0,0.85)',
             textDecoration: 'none',
             whiteSpace: 'nowrap',
           }}
