@@ -28,11 +28,14 @@ import {
   FINAL_PHASE_START_INSTANCE,
   FINAL_PHASE_DURATION_INSTANCES,
   DEFAULT_SCENE_COLORS,
+  LIGHT_BEAMS,
+  AUDIO_CONFIG,
 } from '@/app/lib/sceneConfig';
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
 import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTimeline';
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
 import { AudioEngine } from '@/app/lib/audioEngine';
+import { stepContactAmount } from '@/app/lib/audioMath';
 
 /* ═══════════════════════════════════════════════════════════════
    SHADERS
@@ -309,6 +312,13 @@ export default function Section1() {
   const flowUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
   const sphUniformsRef  = useRef<Record<string, THREE.IUniform> | null>(null);
   const starUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
+  const beamLowpassMeshRef  = useRef<THREE.Mesh | null>(null);
+  const beamHighpassMeshRef = useRef<THREE.Mesh | null>(null);
+
+  // Progressive [0,1] contact amount for each light beam's audio filter,
+  // ramped/released every frame in animate() (Task 14).
+  const lowpassContactRef  = useRef(0);
+  const highpassContactRef = useRef(0);
 
   // NOTE: must stay declared before the setSource/setToneFrequency/setArpeggioMode/
   // gesture-unlock effects below — React runs effect setup in declaration order, so
@@ -390,6 +400,28 @@ export default function Section1() {
     const sphere = new THREE.Mesh(sphGeo, sphMat);
     sphere.position.set(0, SPHERE_R * 0.30, 0); // sunken ~70% into the plane
     scene.add(sphere);
+
+    /* ── Light beams — contact triggers progressive audio filters ──── */
+    const BEAM_HEIGHT = 14;
+    function makeBeam(x: number, z: number, colorHex: string): THREE.Mesh {
+      const geo = new THREE.CylinderGeometry(0.6, 1.8, BEAM_HEIGHT, 24, 1, true);
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(colorHex),
+        transparent: true,
+        opacity: 0.32,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, BEAM_HEIGHT / 2, z);
+      scene.add(mesh);
+      return mesh;
+    }
+    const beamLowpassMesh = makeBeam(LIGHT_BEAMS.lowpass.position.x, LIGHT_BEAMS.lowpass.position.z, colors.beamLowpass);
+    const beamHighpassMesh = makeBeam(LIGHT_BEAMS.highpass.position.x, LIGHT_BEAMS.highpass.position.z, colors.beamHighpass);
+    beamLowpassMeshRef.current  = beamLowpassMesh;
+    beamHighpassMeshRef.current = beamHighpassMesh;
 
     /* ── Star field (visible in sky above horizon) ──────────────── */
     const STAR_COUNT = 550;
@@ -541,6 +573,23 @@ export default function Section1() {
       const sphereSpeed = dt > 0 ? Math.sqrt(spring.vx * spring.vx + spring.vz * spring.vz) / dt : 0;
       audioEngineRef.current?.setDopplerSpeed(sphereSpeed);
 
+      /* Light-beam contact → progressive lowpass / highpass (Task 14). */
+      const dxLow  = sphere.position.x - LIGHT_BEAMS.lowpass.position.x;
+      const dzLow  = sphere.position.z - LIGHT_BEAMS.lowpass.position.z;
+      const inLowpassBeam = Math.sqrt(dxLow * dxLow + dzLow * dzLow) < LIGHT_BEAMS.lowpass.radius;
+      lowpassContactRef.current = stepContactAmount(
+        lowpassContactRef.current, inLowpassBeam, dt, AUDIO_CONFIG.filterRampSeconds, AUDIO_CONFIG.filterReleaseSeconds
+      );
+      audioEngineRef.current?.setLowpassAmount(lowpassContactRef.current);
+
+      const dxHigh = sphere.position.x - LIGHT_BEAMS.highpass.position.x;
+      const dzHigh = sphere.position.z - LIGHT_BEAMS.highpass.position.z;
+      const inHighpassBeam = Math.sqrt(dxHigh * dxHigh + dzHigh * dzHigh) < LIGHT_BEAMS.highpass.radius;
+      highpassContactRef.current = stepContactAmount(
+        highpassContactRef.current, inHighpassBeam, dt, AUDIO_CONFIG.filterRampSeconds, AUDIO_CONFIG.filterReleaseSeconds
+      );
+      audioEngineRef.current?.setHighpassAmount(highpassContactRef.current);
+
       /* Phase 0: tight clamp (half-Y, limited X).
        * After Phase 0 (progress > 0.25): full disc range, no hard walls.
        * The clamps lerp smoothly so there's no jump.                      */
@@ -629,6 +678,8 @@ export default function Section1() {
       planeGeo.dispose(); flowMat.dispose();
       sphGeo.dispose();   sphMat.dispose();
       starGeo.dispose();  starMat.dispose();
+      beamLowpassMesh.geometry.dispose();  (beamLowpassMesh.material as THREE.Material).dispose();
+      beamHighpassMesh.geometry.dispose(); (beamHighpassMesh.material as THREE.Material).dispose();
       audioEngineRef.current?.dispose();
       audioEngineRef.current = null;
     };
@@ -665,6 +716,8 @@ export default function Section1() {
     flowUniformsRef.current?.uNearGlow.value.set(colors.flowNearSphereGlow);
     sphUniformsRef.current?.uChromeHighlight.value.set(colors.sphereChromeHighlight);
     starUniformsRef.current?.uStarTint.value.set(colors.starColor);
+    (beamLowpassMeshRef.current?.material as THREE.MeshBasicMaterial | undefined)?.color.set(colors.beamLowpass);
+    (beamHighpassMeshRef.current?.material as THREE.MeshBasicMaterial | undefined)?.color.set(colors.beamHighpass);
   }, [colors]);
 
   /* Rebuild the source graph on an actual mode switch — expensive (tears
