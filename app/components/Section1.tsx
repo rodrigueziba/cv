@@ -116,8 +116,6 @@ const FLOW_FRAG = /* glsl */`
   uniform vec3  uNearGlow;
   uniform vec2  uSphereVel;
   uniform float uDopplerCompress;
-  uniform vec2  uHoleCenter;
-  uniform float uHoleRadius;
 
   varying vec3 vWorldPos;
 
@@ -227,9 +225,7 @@ const FLOW_FRAG = /* glsl */`
     float vig = 1.0 - smoothstep(9.0, 30.0, length(wxz));
     color    *= 0.10 + vig * 0.96;
 
-    float holeR = max(uHoleRadius, 0.0001);
-    float holeMask = smoothstep(holeR * 0.7, holeR, length(wxz - uHoleCenter));
-    gl_FragColor = vec4(color, holeMask);
+    gl_FragColor = vec4(color, 1.0);
   }
 `;
 
@@ -321,6 +317,7 @@ export default function Section1() {
     pitchInertiaMultiplier,
     floorDopplerIntensityMultiplier,
     floorDopplerInertiaMultiplier,
+    corridorWaveSpeedMultiplier,
   } = useSceneControls();
 
   const [titleVisible, setTitleVisible] = useState(true);
@@ -361,7 +358,6 @@ export default function Section1() {
   const flowUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
   const sphUniformsRef  = useRef<Record<string, THREE.IUniform> | null>(null);
   const starUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
-  const flowMeshRef = useRef<THREE.Mesh | null>(null);
 
   // Progressive [0,1] contact amount for each diagonal ray's audio filter,
   // ramped/released every frame in animate() (Task 14).
@@ -388,12 +384,21 @@ export default function Section1() {
     floorDopplerInertiaMultRef.current = floorDopplerInertiaMultiplier;
   }, [floorDopplerInertiaMultiplier]);
 
-  // Corridor spawned once the floor hole finishes opening (Task 19); drives
+  // Corridor — built once at mount at a fixed world position; drives
   // scroll-controlled sphere travel down its length.
   const corridorRef = useRef<CorridorHandle | null>(null);
   const prevTravelDistanceRef = useRef(0);
   const wasInsideCorridorRef = useRef(false);
   const endLinkRef = useRef<HTMLAnchorElement>(null);
+
+  // Accumulates independently of the global clock so the debug-menu wave-
+  // speed multiplier can change live without discontinuity (a direct
+  // `time * multiplier` would jump whenever the multiplier changes).
+  const corridorTimeAccumRef = useRef(0);
+  const corridorWaveSpeedMultRef = useRef(corridorWaveSpeedMultiplier);
+  useEffect(() => {
+    corridorWaveSpeedMultRef.current = corridorWaveSpeedMultiplier;
+  }, [corridorWaveSpeedMultiplier]);
 
   // Space-bar audio activation/play-pause (Task 7).
   const spacePressedOnceRef = useRef(false);
@@ -458,8 +463,6 @@ export default function Section1() {
       uNearGlow:     { value: new THREE.Color(DEFAULT_SCENE_COLORS.flowNearSphereGlow) },
       uSphereVel:       { value: new THREE.Vector2(0, 0) },
       uDopplerCompress: { value: 0 },
-      uHoleCenter: { value: new THREE.Vector2(0, 0) },
-      uHoleRadius: { value: 0 },
     };
     flowUniformsRef.current = flowUniforms;
     const flowMat  = new THREE.ShaderMaterial({
@@ -467,11 +470,8 @@ export default function Section1() {
       fragmentShader: FLOW_FRAG,
       uniforms:       flowUniforms,
       side:           THREE.DoubleSide,
-      transparent:    true,
     });
-    const flowMesh = new THREE.Mesh(planeGeo, flowMat);
-    scene.add(flowMesh);
-    flowMeshRef.current = flowMesh;
+    scene.add(new THREE.Mesh(planeGeo, flowMat));
 
     /* ── Sphere ─────────────────────────────────────────────────── */
     const sphGeo = new THREE.SphereGeometry(SPHERE_R, 64, 64);
@@ -491,6 +491,17 @@ export default function Section1() {
     const sphere = new THREE.Mesh(sphGeo, sphMat);
     sphere.position.set(0, SPHERE_R * 0.30, 0); // sunken ~70% into the plane
     scene.add(sphere);
+
+    /* ── Corridor — fixed position far below the main disc; the final
+     * phase teleports the sphere+camera here, never rebuilt. ──────── */
+    const corridor = buildCorridor(
+      SPHERE_R,
+      new THREE.Vector3(0, CORRIDOR_CONFIG.yOffset, 0),
+      colorsRef.current.corridorWallStart,
+      colorsRef.current.corridorWallEnd
+    );
+    scene.add(corridor.group);
+    corridorRef.current = corridor;
 
     /* ── Star field (visible in sky above horizon) ──────────────── */
     const STAR_COUNT = 550;
@@ -580,17 +591,20 @@ export default function Section1() {
       camera.lookAt(tx, ty, tz);
     }
 
-    const FINAL_CLOSE_OFFSET = new THREE.Vector3(SPHERE_R * 3.0, SPHERE_R * 1.3, 0);
-    const HOLE_MAX_RADIUS = 34;
+    const CORRIDOR_UP = new THREE.Vector3(0, 1, 0);
 
-    function applyFinalPhaseCamera(finalProgress: number, spherePos: THREE.Vector3) {
-      const zoomT = ease(remapSubrange(finalProgress, FINAL_PHASE_SUBRANGES.zoomToSphere));
-      const startPos    = new THREE.Vector3(...CAM[3].pos);
-      const startTarget = new THREE.Vector3(...CAM[3].target);
-      const dynamicPos  = spherePos.clone().add(FINAL_CLOSE_OFFSET);
-      camera.position.copy(startPos.clone().lerp(dynamicPos, zoomT));
-      camera.up.set(...CAM[3].up).normalize();
-      camera.lookAt(startTarget.clone().lerp(spherePos, zoomT));
+    /** Simple third-person chase camera: sits behind (relative to travel
+     * direction) and above the sphere, always looking at it. Pure function
+     * of the sphere's current position — no per-frame state, so it's
+     * trivially correct whether scrolling forward or backward through the
+     * corridor. */
+    function applyCorridorCamera(spherePos: THREE.Vector3) {
+      const diameter = SPHERE_R * 2;
+      const behindOffset = corridor.axis.clone().multiplyScalar(-diameter * CORRIDOR_CONFIG.chaseDistanceMultiplier);
+      const camPos = spherePos.clone().add(behindOffset).add(new THREE.Vector3(0, diameter * CORRIDOR_CONFIG.chaseHeightMultiplier, 0));
+      camera.position.copy(camPos);
+      camera.up.copy(CORRIDOR_UP);
+      camera.lookAt(spherePos);
     }
 
     /* ── Spring physics for sphere following mouse ───────────────── */
@@ -617,22 +631,15 @@ export default function Section1() {
       sphUniforms.uProgress.value  = progress;
       starUniforms.uTime.value     = time;
 
-      /* Camera transition */
+      /* Scroll-timeline gating: the final phase begins the instant scroll
+       * passes the last text block — a hard teleport to the corridor
+       * (see CORRIDOR_CONFIG.yOffset), not a gradual zoom/reveal. */
       const instance = scrollInstanceRef.current;
       const finalPhaseProgress = remapSubrange(
         instance,
         { start: FINAL_PHASE_START_INSTANCE, end: FINAL_PHASE_START_INSTANCE + FINAL_PHASE_DURATION_INSTANCES }
       );
-      if (finalPhaseProgress <= 0) {
-        applyCamKeyframes(progress);
-      } else {
-        applyFinalPhaseCamera(finalPhaseProgress, sphere.position);
-      }
-
-      const holeT = remapSubrange(finalPhaseProgress, FINAL_PHASE_SUBRANGES.floorOpens);
-      flowUniforms.uHoleCenter.value.set(sphere.position.x, sphere.position.z);
-      flowUniforms.uHoleRadius.value = holeT * HOLE_MAX_RADIUS;
-      if (flowMeshRef.current) flowMeshRef.current.visible = holeT < 1;
+      const insideCorridorPhase = finalPhaseProgress > 0;
 
       /*
        * Progressive mouse control rotation
@@ -644,17 +651,17 @@ export default function Section1() {
        * Lower-half Y constraint fades out as camera ascends to zenith,
        * releasing to full-range Y control by ~40% scroll.
        */
-      const insideCorridorPhase = finalPhaseProgress > FINAL_PHASE_SUBRANGES.floorOpens.end;
       let sphereSpeed: number;
+      let corridorTravelT = 0;
 
       if (!insideCorridorPhase) {
         /* ── Original disc/mouse-spring control (unchanged) ── */
         if (wasInsideCorridorRef.current) {
-          // Resume disc physics continuously from wherever the sphere actually
-          // was in the corridor, instead of snapping back to the frozen
-          // pre-corridor spring state.
-          spring.x = sphere.position.x;
-          spring.z = sphere.position.z;
+          // Hard teleport back from the corridor — there's no spatial
+          // continuity to preserve either direction, so resume disc
+          // physics from the center rather than the corridor's exit point.
+          spring.x = 0;
+          spring.z = 0;
           spring.vx = 0;
           spring.vz = 0;
         }
@@ -662,29 +669,24 @@ export default function Section1() {
         const mx = mouseRef.current.x;
         const my = mouseRef.current.y; // +1 = top, −1 = bottom
 
-        /* Lower-half Y constraint fades to zero exactly at Phase 1 (progress=0.25) */
         const constraintFade = Math.max(0, 1 - progress / 0.25);
-        const myPhase0 = my < 0 ? -my : 0;        // lower-half only
-        const myPhase3 = -my;                       // full range, inverted
-        const myInput  = myPhase0 * constraintFade + myPhase3 * (1 - constraintFade);
+        const myPhase0 = my < 0 ? -my : 0;
+        const myPhase3 = -my;
+        const myInput = myPhase0 * constraintFade + myPhase3 * (1 - constraintFade);
 
-        /* Rotate control frame by (progress × 90°) */
         const angle = progress * Math.PI / 2;
-        const cosA  = Math.cos(angle);
-        const sinA  = Math.sin(angle);
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
         const targetX = (mx * cosA - myInput * sinA) * MAX_X;
         const targetZ = (mx * sinA + myInput * cosA) * MAX_Z;
 
-        spring.vx  = spring.vx * SPRING_DAMP + (targetX - spring.x) * SPRING_K;
-        spring.vz  = spring.vz * SPRING_DAMP + (targetZ - spring.z) * SPRING_K;
-        spring.x  += spring.vx;
-        spring.z  += spring.vz;
+        spring.vx = spring.vx * SPRING_DAMP + (targetX - spring.x) * SPRING_K;
+        spring.vz = spring.vz * SPRING_DAMP + (targetZ - spring.z) * SPRING_K;
+        spring.x += spring.vx;
+        spring.z += spring.vz;
 
-        /* Phase 0: tight clamp (half-Y, limited X).
-         * After Phase 0 (progress > 0.25): full disc range, no hard walls.
-         * The clamps lerp smoothly so there's no jump.                      */
-        const clampFade = Math.max(0, 1 - progress / 0.22);   // 0→1 fades by p=0.22
-        const clampX    = THREE.MathUtils.lerp(PLANE * 0.85, MAX_X, clampFade);
+        const clampFade = Math.max(0, 1 - progress / 0.22);
+        const clampX = THREE.MathUtils.lerp(PLANE * 0.85, MAX_X, clampFade);
         const clampZMin = THREE.MathUtils.lerp(-(PLANE * 0.85), 0, clampFade);
         const clampZMax = PLANE * 0.85;
         spring.x = THREE.MathUtils.clamp(spring.x, -clampX, clampX);
@@ -693,28 +695,10 @@ export default function Section1() {
         sphere.position.x = spring.x;
         sphere.position.z = spring.z;
 
-        /* World-units/second speed → drives the doppler pitch shift (Task 13). */
         sphereSpeed = dt > 0 ? Math.sqrt(spring.vx * spring.vx + spring.vz * spring.vz) / dt : 0;
-
-        if (endLinkRef.current) {
-          endLinkRef.current.style.opacity = '0';
-          endLinkRef.current.style.pointerEvents = 'none';
-          endLinkRef.current.tabIndex = -1;
-          endLinkRef.current.setAttribute('aria-hidden', 'true');
-        }
       } else {
         /* ── Corridor: mouse control frozen; travel driven by scroll ── */
-        if (!corridorRef.current) {
-          corridorRef.current = buildCorridor(
-            SPHERE_R,
-            sphere.position.clone(),
-            colorsRef.current.corridorWallStart,
-            colorsRef.current.corridorWallEnd
-          );
-          scene.add(corridorRef.current.group);
-        }
-        const corridor = corridorRef.current;
-        const corridorTravelT = remapSubrange(finalPhaseProgress, FINAL_PHASE_SUBRANGES.corridorTravel);
+        corridorTravelT = remapSubrange(finalPhaseProgress, FINAL_PHASE_SUBRANGES.corridorTravel);
         const travelDistance = corridorTravelDistance(corridorTravelT, corridor.length, SPHERE_R);
 
         sphere.position.copy(corridor.entrance).addScaledVector(corridor.axis, travelDistance);
@@ -725,19 +709,34 @@ export default function Section1() {
         sphereSpeed = dt > 0 ? Math.abs(travelDistance - prevTravelDistanceRef.current) / dt : 0;
         prevTravelDistanceRef.current = travelDistance;
 
-        corridor.patternUniforms.uTime.value = time;
+        corridorTimeAccumRef.current += dt * corridorWaveSpeedMultRef.current;
+        corridor.patternUniforms.uTime.value = corridorTimeAccumRef.current;
         corridor.endWallUniforms.uColorT.value = corridorTravelT;
+      }
 
-        // .project(camera) relies on camera.matrixWorldInverse, which is normally
-        // refreshed by composer.render() — but that runs AFTER this point in the
-        // frame, so without an explicit update here we'd project against last
-        // frame's camera transform. Force it current first.
+      /* Ground level differs by phase — disc floor is at world y=0,
+       * corridor floor is at CORRIDOR_CONFIG.yOffset. Sphere sinks the
+       * same ~70% into either floor. */
+      const groundY = insideCorridorPhase ? CORRIDOR_CONFIG.yOffset : 0;
+      sphere.position.y = groundY + SPHERE_R * 0.30;
+      wasInsideCorridorRef.current = insideCorridorPhase;
+
+      /* Camera — computed AFTER the position branch above so it always
+       * reads the CURRENT frame's sphere position, with zero lag. */
+      if (!insideCorridorPhase) {
+        applyCamKeyframes(progress);
+      } else {
+        applyCorridorCamera(sphere.position);
+      }
+
+      /* End-of-corridor link — only relevant, and only projected, while
+       * actually inside the corridor. */
+      if (insideCorridorPhase) {
+        // .project(camera) relies on camera.matrixWorldInverse, which is
+        // normally refreshed by composer.render() — but that runs AFTER
+        // this point in the frame, so without an explicit update here
+        // we'd project against last frame's camera transform.
         camera.updateMatrixWorld();
-        // Projected position is expected to be unstable/off-screen for most of the
-        // traversal — camera.updateMatrixWorld() above keeps it accurate, but the
-        // end wall is often near/behind the view frustum boundary until the sphere
-        // gets close. Harmless: opacity/pointerEvents/tabIndex all gate visibility
-        // + interactivity until `reached`.
         const projected = corridor.endWallCenter.clone().project(camera);
         if (endLinkRef.current) {
           endLinkRef.current.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
@@ -748,10 +747,12 @@ export default function Section1() {
           endLinkRef.current.tabIndex = reached ? 0 : -1;
           endLinkRef.current.setAttribute('aria-hidden', reached ? 'false' : 'true');
         }
+      } else if (endLinkRef.current) {
+        endLinkRef.current.style.opacity = '0';
+        endLinkRef.current.style.pointerEvents = 'none';
+        endLinkRef.current.tabIndex = -1;
+        endLinkRef.current.setAttribute('aria-hidden', 'true');
       }
-
-      sphere.position.y = SPHERE_R * 0.30; // sunken ~70% into the plane
-      wasInsideCorridorRef.current = insideCorridorPhase;
 
       audioEngineRef.current?.setDopplerSpeed(sphereSpeed, dt);
       flowUniforms.uSphereXZ.value.set(sphere.position.x, sphere.position.z);
@@ -894,8 +895,8 @@ export default function Section1() {
       planeGeo.dispose(); flowMat.dispose();
       sphGeo.dispose();   sphMat.dispose();
       starGeo.dispose();  starMat.dispose();
-      corridorRef.current?.dispose();
-      if (corridorRef.current) scene.remove(corridorRef.current.group);
+      corridor.dispose();
+      scene.remove(corridor.group);
       corridorRef.current = null;
       audioEngineRef.current?.dispose();
       audioEngineRef.current = null;
