@@ -155,11 +155,9 @@ export function buildCorridor(
 
   meshes.forEach((m) => group.add(m));
   group.position.copy(entrancePosition);
-  group.position.y = 0;
 
   const axis = new THREE.Vector3(0, 0, -1);
-  const groupWorldPos = new THREE.Vector3(entrancePosition.x, 0, entrancePosition.z); // matches group.position after the y=0 zeroing above
-  const endWallCenter = groupWorldPos.clone().add(new THREE.Vector3(0, crossSection / 2, -length - thickness / 2));
+  const endWallCenter = entrancePosition.clone().add(new THREE.Vector3(0, crossSection / 2, -length - thickness / 2));
 
   return {
     group,
