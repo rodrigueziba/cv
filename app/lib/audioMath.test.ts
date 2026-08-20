@@ -6,6 +6,7 @@ import {
   stepFloorDopplerState,
   type DopplerFloorState,
 } from './audioMath';
+import { stepPitchEnvelope, type PitchEnvelopeState, type PitchEnvelopeConfig } from './audioMath';
 
 describe('lerpLog', () => {
   it('returns a at t=0 and b at t=1', () => {
@@ -100,5 +101,92 @@ describe('stepFloorDopplerState', () => {
     // Halfway through a 2.0s release window (at t=0.5s / 25% elapsed) should be ~75% remaining, NOT near-zero.
     expect(state.intensity).toBeGreaterThan(0.6);
     expect(state.intensity).toBeCloseTo(0.75, 1);
+  });
+});
+
+describe('stepPitchEnvelope', () => {
+  const cfg: PitchEnvelopeConfig = {
+    dopplerMinPlaybackRate: 0.55,
+    dopplerMaxPlaybackRate: 2.6,
+    dopplerSpeedForMaxRate: 4.5,
+    dopplerRiseTimeConstant: 0.15,
+    dopplerFallTimeConstant: 1.3,
+    dopplerUndershootRate: 0.62,
+    dopplerUndershootTimeConstant: 0.35,
+    dopplerUndershootDurationSeconds: 2.0,
+    dopplerUndershootTriggerSpeed: 3.0,
+  };
+  const initial: PitchEnvelopeState = { rate: 1.0, peakSpeed: 0, undershootTimer: 0 };
+
+  it('starts at neutral rate 1.0 for zero speed', () => {
+    expect(initial.rate).toBe(1.0);
+  });
+
+  it('rises quickly toward the speed-driven target while accelerating (uses the fast rise time constant)', () => {
+    // Sustained high speed for 0.15s (one rise time constant) should get ~63% of the way to target.
+    let state = initial;
+    for (let i = 0; i < 15; i++) state = stepPitchEnvelope(state, 4.5, 0.01, cfg); // 0.15s @ speed=max
+    // target at speed=4.5 (== dopplerSpeedForMaxRate) is 2.6; expect meaningfully past halfway there.
+    expect(state.rate).toBeGreaterThan(1.6);
+    expect(state.rate).toBeLessThan(2.6);
+  });
+
+  it('does NOT rise as fast as it falls would (rise time constant is much shorter than fall)', () => {
+    // Peak speed deliberately stays BELOW dopplerUndershootTriggerSpeed (3.0) throughout
+    // this test — otherwise the subsequent slow-down would arm the undershoot (a much
+    // faster, DIFFERENT time constant) instead of exercising the plain fall constant.
+    let risen = initial;
+    for (let i = 0; i < 15; i++) risen = stepPitchEnvelope(risen, 2.0, 0.01, cfg); // 0.15s of acceleration, peak=2.0 < trigger
+    let eased = risen;
+    for (let i = 0; i < 15; i++) eased = stepPitchEnvelope(eased, 0.1, 0.01, cfg); // 0.15s "coasting" — not sharp/high enough to arm the undershoot
+    const roseAmount = risen.rate - initial.rate;
+    const easedAmount = risen.rate - eased.rate;
+    expect(easedAmount).toBeLessThan(roseAmount * 0.3); // falls much more slowly than it rose
+  });
+
+  it('dips BELOW neutral (undershoot) after decelerating sharply from a fast peak', () => {
+    // Ramp up to a fast peak well above the trigger threshold.
+    let state = initial;
+    for (let i = 0; i < 100; i++) state = stepPitchEnvelope(state, 4.5, 0.01, cfg); // 1s at max speed
+    expect(state.peakSpeed).toBeGreaterThanOrEqual(cfg.dopplerUndershootTriggerSpeed);
+    // Sharp deceleration to a near-stop.
+    state = stepPitchEnvelope(state, 0, 0.01, cfg);
+    expect(state.undershootTimer).toBeGreaterThan(0); // armed
+    // Let the undershoot glide play out — rate should drop below 1.0 (neutral), toward 0.62.
+    // With dopplerUndershootTimeConstant=0.35s and a starting rate near 2.6, the
+    // exponential glide crosses below 1.0 at ~0.58s (rate(t) = 0.62 + 1.98*exp(-t/0.35));
+    // 0.8s gives comfortable margin while staying well inside the 2.0s hold window.
+    for (let i = 0; i < 80; i++) state = stepPitchEnvelope(state, 0, 0.01, cfg); // 0.8s more
+    expect(state.rate).toBeLessThan(1.0);
+  });
+
+  it('holds the undershoot for approximately dopplerUndershootDurationSeconds, then releases back toward neutral', () => {
+    let state = initial;
+    for (let i = 0; i < 100; i++) state = stepPitchEnvelope(state, 4.5, 0.01, cfg); // ramp to peak
+    state = stepPitchEnvelope(state, 0, 0.01, cfg); // trigger undershoot
+    expect(state.undershootTimer).toBeCloseTo(cfg.dopplerUndershootDurationSeconds, 1);
+    // Step through just under the full duration — should still be armed (timer > 0).
+    for (let i = 0; i < 190; i++) state = stepPitchEnvelope(state, 0, 0.01, cfg); // ~1.9s more
+    expect(state.undershootTimer).toBeGreaterThan(0);
+    expect(state.undershootTimer).toBeLessThan(0.2);
+    // A bit more and it should have released (timer hits 0, target flips back to neutral-ish).
+    for (let i = 0; i < 20; i++) state = stepPitchEnvelope(state, 0, 0.01, cfg); // ~0.2s more (total ~2.1s)
+    expect(state.undershootTimer).toBe(0);
+  });
+
+  it('does NOT arm the undershoot for small/jittery deceleration below the trigger speed', () => {
+    let state = initial;
+    // Gentle speed, well under dopplerUndershootTriggerSpeed (3.0) the whole time.
+    for (let i = 0; i < 50; i++) state = stepPitchEnvelope(state, 1.0, 0.01, cfg);
+    state = stepPitchEnvelope(state, 0, 0.01, cfg); // "decelerate" to 0
+    expect(state.undershootTimer).toBe(0); // never armed — peak never exceeded the trigger speed
+  });
+
+  it('is frame-rate independent for the same cumulative elapsed time', () => {
+    let stateA = initial;
+    for (let i = 0; i < 100; i++) stateA = stepPitchEnvelope(stateA, 4.5, 1 / 100, cfg); // 100 steps of 1s total
+    let stateB = initial;
+    for (let i = 0; i < 25; i++) stateB = stepPitchEnvelope(stateB, 4.5, 1 / 25, cfg); // 25 steps of 1s total
+    expect(stateA.rate).toBeCloseTo(stateB.rate, 2);
   });
 });

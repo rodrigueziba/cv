@@ -107,3 +107,76 @@ export function stepFloorDopplerState(
     releaseStartIntensity: state.releaseStartIntensity, // frozen during release
   };
 }
+
+export interface PitchEnvelopeConfig extends DopplerSpeedConfig {
+  dopplerRiseTimeConstant: number;
+  dopplerFallTimeConstant: number;
+  dopplerUndershootRate: number;
+  dopplerUndershootTimeConstant: number;
+  dopplerUndershootDurationSeconds: number;
+  dopplerUndershootTriggerSpeed: number;
+}
+
+export interface PitchEnvelopeState {
+  /** Current smoothed playbackRate-equivalent multiplier. */
+  rate: number;
+  /** Recently-decaying peak speed, used to detect "decelerated sharply from a fast peak". */
+  peakSpeed: number;
+  /** Seconds remaining in an active post-deceleration undershoot; 0 = inactive. */
+  undershootTimer: number;
+}
+
+/** How quickly `peakSpeed` decays per second when not being pushed higher by the current speed. */
+const PEAK_DECAY_PER_SECOND = 0.9;
+/** Speed must drop below this fraction of the recent peak to count as "decelerating sharply". */
+const DECEL_FRACTION = 0.5;
+
+/**
+ * Advances the doppler pitch envelope by one frame. Three regimes:
+ *  - Accelerating/high speed: `rate` glides toward the speed-driven
+ *    target using the SHORT `dopplerRiseTimeConstant` (fast, evident rise).
+ *  - Cruising/slowly changing: glides using the LONG `dopplerFallTimeConstant`
+ *    ("más inercia" — pitch lingers elevated after the sphere slows).
+ *  - Sharp deceleration from a peak that exceeded `dopplerUndershootTriggerSpeed`:
+ *    arms a `dopplerUndershootDurationSeconds`-long dip toward
+ *    `dopplerUndershootRate` (below neutral — "un pitch mas grave"),
+ *    glided into quickly via `dopplerUndershootTimeConstant`, then
+ *    released back to the normal speed-driven target once the timer
+ *    expires (using the rise/fall constants again, whichever applies).
+ * All glides use exponential (dt-aware) smoothing, so behavior is
+ * frame-rate independent — see stepFloorDopplerState's docstring for
+ * why a naive per-frame multiply would NOT be (a real bug found once
+ * already in this codebase).
+ */
+export function stepPitchEnvelope(
+  state: PitchEnvelopeState,
+  speed: number,
+  dtSeconds: number,
+  cfg: PitchEnvelopeConfig
+): PitchEnvelopeState {
+  const targetFromSpeed = speedToPlaybackRate(speed, cfg);
+
+  let peakSpeed = Math.max(speed, state.peakSpeed * Math.pow(PEAK_DECAY_PER_SECOND, dtSeconds));
+
+  const decelerating = speed < peakSpeed * DECEL_FRACTION && peakSpeed >= cfg.dopplerUndershootTriggerSpeed;
+
+  let undershootTimer = state.undershootTimer;
+  if (undershootTimer <= 0 && decelerating) {
+    undershootTimer = cfg.dopplerUndershootDurationSeconds;
+    peakSpeed = 0; // consumed — avoid re-triggering every frame while still slow
+  } else if (undershootTimer > 0) {
+    undershootTimer = Math.max(0, undershootTimer - dtSeconds);
+  }
+
+  const target = undershootTimer > 0 ? cfg.dopplerUndershootRate : targetFromSpeed;
+  const timeConstant =
+    undershootTimer > 0
+      ? cfg.dopplerUndershootTimeConstant
+      : target > state.rate
+        ? cfg.dopplerRiseTimeConstant
+        : cfg.dopplerFallTimeConstant;
+  const alpha = timeConstant > 0 ? 1 - Math.exp(-dtSeconds / timeConstant) : 1;
+  const rate = state.rate + (target - state.rate) * alpha;
+
+  return { rate, peakSpeed, undershootTimer };
+}
