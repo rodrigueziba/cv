@@ -537,6 +537,10 @@ export default function Section1() {
       spring.x  += spring.vx;
       spring.z  += spring.vz;
 
+      /* World-units/second speed → drives the doppler pitch shift (Task 13). */
+      const sphereSpeed = dt > 0 ? Math.sqrt(spring.vx * spring.vx + spring.vz * spring.vz) / dt : 0;
+      audioEngineRef.current?.setDopplerSpeed(sphereSpeed);
+
       /* Phase 0: tight clamp (half-Y, limited X).
        * After Phase 0 (progress > 0.25): full disc range, no hard walls.
        * The clamps lerp smoothly so there's no jump.                      */
