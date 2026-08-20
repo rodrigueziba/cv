@@ -359,6 +359,14 @@ export default function Section1() {
     colorsRef.current = colors;
   }, [colors]);
 
+  // Mirrors `audioActivated` for reads inside animate()'s []-dep closure
+  // (corridor-exit visibility restore needs the CURRENT value, not the
+  // mount-time one — same stale-closure concern colorsRef exists to avoid).
+  const audioActivatedRef = useRef(audioActivated);
+  useEffect(() => {
+    audioActivatedRef.current = audioActivated;
+  }, [audioActivated]);
+
   const flowUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
   const sphUniformsRef  = useRef<Record<string, THREE.IUniform> | null>(null);
   const starUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
@@ -739,15 +747,19 @@ export default function Section1() {
       // Title/space-prompt are otherwise controlled by React state that's
       // independent of scroll depth (a wall-clock timer / audioActivated) —
       // a fast scroll can carry either into the corridor view, overlapping
-      // the 3D scene. Force-hide imperatively while inside the corridor;
-      // clearing to '' on exit hands control back to React's own styling.
+      // the 3D scene. Force-hide imperatively while inside the corridor; on
+      // exit, restore based on the CURRENT live React state (via ref
+      // mirrors) rather than blindly clearing to '' — a blind clear would
+      // hand back whatever React's LAST render set, which is wrong if the
+      // title/prompt were already legitimately hidden (5s auto-hide timer /
+      // audioActivated) before the corridor was entered.
       if (insideCorridorPhase !== wasInsideCorridorRef.current) {
         if (titleRef.current) {
-          titleRef.current.style.opacity = insideCorridorPhase ? '0' : '';
-          titleRef.current.style.animation = insideCorridorPhase ? 'none' : '';
+          titleRef.current.style.opacity = insideCorridorPhase ? '0' : (titleVisibleRef.current ? '' : '0');
+          titleRef.current.style.animation = insideCorridorPhase ? 'none' : (titleVisibleRef.current ? '' : 'none');
         }
         if (spacePromptRef.current) {
-          spacePromptRef.current.style.opacity = insideCorridorPhase ? '0' : '';
+          spacePromptRef.current.style.opacity = insideCorridorPhase ? '0' : (audioActivatedRef.current ? '0' : '');
         }
       }
 
