@@ -357,7 +357,7 @@ export default function Section1() {
   const starUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
   const flowMeshRef = useRef<THREE.Mesh | null>(null);
 
-  // Progressive [0,1] contact amount for each light beam's audio filter,
+  // Progressive [0,1] contact amount for each diagonal ray's audio filter,
   // ramped/released every frame in animate() (Task 14).
   const lowpassContactRef  = useRef(0);
   const highpassContactRef = useRef(0);
