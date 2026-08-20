@@ -307,6 +307,12 @@ export default function Section1() {
   const { colors, audioSourceMode, toneFrequencyHz, arpeggioMode, uploadedFileUrl, audioActivated } = useSceneControls();
 
   const [titleVisible, setTitleVisible] = useState(true);
+  // Mirrors `titleVisible` for reads inside onScroll — that function lives in
+  // the mount effect's once-only ([]) closure, so a direct read of the state
+  // variable there would be permanently stuck at its mount-time value instead
+  // of the current one (same stale-closure concern colorsRef/audioSourceModeRef
+  // above exist to avoid). Kept in sync at every setTitleVisible call site.
+  const titleVisibleRef = useRef(true);
   const titleHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleHideTimerArmedRef = useRef(false);
 
@@ -809,10 +815,16 @@ export default function Section1() {
           titleHideTimerRef.current = null;
         }
         titleHideTimerArmedRef.current = false;
-        setTitleVisible(true);
+        if (!titleVisibleRef.current) {
+          titleVisibleRef.current = true;
+          setTitleVisible(true);
+        }
       } else if (!titleHideTimerArmedRef.current) {
         titleHideTimerArmedRef.current = true;
-        titleHideTimerRef.current = setTimeout(() => setTitleVisible(false), TITLE_HIDE_DELAY_SECONDS * 1000);
+        titleHideTimerRef.current = setTimeout(() => {
+          titleVisibleRef.current = false;
+          setTitleVisible(false);
+        }, TITLE_HIDE_DELAY_SECONDS * 1000);
       }
     }
 
@@ -863,6 +875,7 @@ export default function Section1() {
       audioEngineRef.current?.dispose();
       audioEngineRef.current = null;
       if (titleHideTimerRef.current !== null) clearTimeout(titleHideTimerRef.current);
+      titleHideTimerArmedRef.current = false;
     };
   }, []);
 
