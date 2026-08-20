@@ -29,7 +29,7 @@ import {
   FINAL_PHASE_DURATION_INSTANCES,
   FINAL_PHASE_SUBRANGES,
   DEFAULT_SCENE_COLORS,
-  LIGHT_BEAMS,
+  DIAGONAL_RAYS_CONFIG,
   AUDIO_CONFIG,
   FLOOR_DOPPLER_CONFIG,
   FLOOR_DOPPLER_MIN_CAMERA_PROGRESS,
@@ -355,8 +355,6 @@ export default function Section1() {
   const flowUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
   const sphUniformsRef  = useRef<Record<string, THREE.IUniform> | null>(null);
   const starUniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
-  const beamLowpassMeshRef  = useRef<THREE.Mesh | null>(null);
-  const beamHighpassMeshRef = useRef<THREE.Mesh | null>(null);
   const flowMeshRef = useRef<THREE.Mesh | null>(null);
 
   // Progressive [0,1] contact amount for each light beam's audio filter,
@@ -475,28 +473,6 @@ export default function Section1() {
     const sphere = new THREE.Mesh(sphGeo, sphMat);
     sphere.position.set(0, SPHERE_R * 0.30, 0); // sunken ~70% into the plane
     scene.add(sphere);
-
-    /* ── Light beams — contact triggers progressive audio filters ──── */
-    const BEAM_HEIGHT = 14;
-    function makeBeam(x: number, z: number, colorHex: string): THREE.Mesh {
-      const geo = new THREE.CylinderGeometry(0.6, 1.8, BEAM_HEIGHT, 24, 1, true);
-      const mat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(colorHex),
-        transparent: true,
-        opacity: 0.32,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(x, BEAM_HEIGHT / 2, z);
-      scene.add(mesh);
-      return mesh;
-    }
-    const beamLowpassMesh = makeBeam(LIGHT_BEAMS.lowpass.position.x, LIGHT_BEAMS.lowpass.position.z, DEFAULT_SCENE_COLORS.beamLowpass);
-    const beamHighpassMesh = makeBeam(LIGHT_BEAMS.highpass.position.x, LIGHT_BEAMS.highpass.position.z, DEFAULT_SCENE_COLORS.beamHighpass);
-    beamLowpassMeshRef.current  = beamLowpassMesh;
-    beamHighpassMeshRef.current = beamHighpassMesh;
 
     /* ── Star field (visible in sky above horizon) ──────────────── */
     const STAR_COUNT = 550;
@@ -762,20 +738,20 @@ export default function Section1() {
       audioEngineRef.current?.setDopplerSpeed(sphereSpeed);
       flowUniforms.uSphereXZ.value.set(sphere.position.x, sphere.position.z);
 
-      /* Light-beam contact → progressive lowpass / highpass (Task 14). */
-      const dxLow  = sphere.position.x - LIGHT_BEAMS.lowpass.position.x;
-      const dzLow  = sphere.position.z - LIGHT_BEAMS.lowpass.position.z;
-      const inLowpassBeam = Math.sqrt(dxLow * dxLow + dzLow * dzLow) < LIGHT_BEAMS.lowpass.radius;
+      /* Diagonal-ray contact → progressive lowpass (red) / highpass (amber).
+       * `sv` mirrors FLOW_FRAG's exact line equation for the red streak
+       * (`sv = z - 0.55*x + 1`); the amber line sits at `sv = -secondaryOffset`. */
+      const svAtSphere = sphere.position.z - 0.55 * sphere.position.x + 1.0;
+
+      const inRedRay = Math.abs(svAtSphere) < DIAGONAL_RAYS_CONFIG.contactWidth;
       lowpassContactRef.current = stepContactAmount(
-        lowpassContactRef.current, inLowpassBeam, dt, AUDIO_CONFIG.filterRampSeconds, AUDIO_CONFIG.filterReleaseSeconds
+        lowpassContactRef.current, inRedRay, dt, AUDIO_CONFIG.filterRampSeconds, AUDIO_CONFIG.filterReleaseSeconds
       );
       audioEngineRef.current?.setLowpassAmount(lowpassContactRef.current);
 
-      const dxHigh = sphere.position.x - LIGHT_BEAMS.highpass.position.x;
-      const dzHigh = sphere.position.z - LIGHT_BEAMS.highpass.position.z;
-      const inHighpassBeam = Math.sqrt(dxHigh * dxHigh + dzHigh * dzHigh) < LIGHT_BEAMS.highpass.radius;
+      const inAmberRay = Math.abs(svAtSphere + DIAGONAL_RAYS_CONFIG.secondaryOffset) < DIAGONAL_RAYS_CONFIG.contactWidth;
       highpassContactRef.current = stepContactAmount(
-        highpassContactRef.current, inHighpassBeam, dt, AUDIO_CONFIG.filterRampSeconds, AUDIO_CONFIG.filterReleaseSeconds
+        highpassContactRef.current, inAmberRay, dt, AUDIO_CONFIG.filterRampSeconds, AUDIO_CONFIG.filterReleaseSeconds
       );
       audioEngineRef.current?.setHighpassAmount(highpassContactRef.current);
 
@@ -887,8 +863,6 @@ export default function Section1() {
       planeGeo.dispose(); flowMat.dispose();
       sphGeo.dispose();   sphMat.dispose();
       starGeo.dispose();  starMat.dispose();
-      beamLowpassMesh.geometry.dispose();  (beamLowpassMesh.material as THREE.Material).dispose();
-      beamHighpassMesh.geometry.dispose(); (beamHighpassMesh.material as THREE.Material).dispose();
       corridorRef.current?.dispose();
       if (corridorRef.current) scene.remove(corridorRef.current.group);
       corridorRef.current = null;
@@ -963,8 +937,6 @@ export default function Section1() {
     flowUniformsRef.current?.uNearGlow.value.set(colors.flowNearSphereGlow);
     sphUniformsRef.current?.uChromeHighlight.value.set(colors.sphereChromeHighlight);
     starUniformsRef.current?.uStarTint.value.set(colors.starColor);
-    (beamLowpassMeshRef.current?.material as THREE.MeshBasicMaterial | undefined)?.color.set(colors.beamLowpass);
-    (beamHighpassMeshRef.current?.material as THREE.MeshBasicMaterial | undefined)?.color.set(colors.beamHighpass);
     corridorRef.current?.endWallUniforms.uColorStart.value.set(colors.corridorWallStart);
     corridorRef.current?.endWallUniforms.uColorEnd.value.set(colors.corridorWallEnd);
   }, [colors]);

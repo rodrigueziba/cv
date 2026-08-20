@@ -12,8 +12,6 @@ const COLOR_LABELS: Record<SceneColorKey, string> = {
   flowNearSphereGlow: 'Halo cerca de la esfera',
   sphereChromeHighlight: 'Brillo cromado (esfera)',
   starColor: 'Estrellas',
-  beamLowpass: 'Haz — pasa bajos',
-  beamHighpass: 'Haz — pasa altos',
   corridorWallStart: 'Pasillo — pared inicial',
   corridorWallEnd: 'Pasillo — pared final',
 };
