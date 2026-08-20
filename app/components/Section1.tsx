@@ -289,6 +289,9 @@ export default function Section1() {
   const textBlockRefs = useRef<HTMLDivElement[]>([]);
   const scrollInstanceRef = useRef(0); // raw scroll timeline position, in "instances"
 
+  // Read by a later task's rAF-loop code (corridor construction) that needs the
+  // CURRENT colors without the stale-closure problem `animate()`'s single
+  // mount-time closure would otherwise have. Not consumed within this task.
   const colorsRef = useRef(colors);
   useEffect(() => {
     colorsRef.current = colors;
