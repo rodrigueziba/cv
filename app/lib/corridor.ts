@@ -40,35 +40,74 @@ const PATTERN_FRAG = /* glsl */ `
   varying vec3  vNormal;
   varying float vLocalZ;
   void main() {
-    // How close this fragment is along the tunnel's length to the sphere —
-    // a 1D analogue of FLOW_FRAG's radial falloff around the sphere.
-    float distFromSphere = abs(vLocalZ - uSpherePosZ);
-    float falloff = 1.0 - smoothstep(0.0, uLength * 0.30, distFromSphere);
-    // Reactive only in the tunnel's first uReactivePortion; the back half
-    // always reads like the calm, undisturbed lines at the very start of
-    // the page's scroll (sphere far away) — smoothstepped over a short
-    // band so there's no visible seam at the 50% boundary.
+    /*
+     * Direct port of FLOW_FRAG's potential-flow technique (see
+     * Section1.tsx) onto this surface's own local plane, instead of the
+     * old 1D periodic-band pattern — this is what makes the lines
+     * genuinely CURVE around wherever the sphere currently is, instead
+     * of reading as flat, repetitive ripples.
+     *
+     * "secondaryAxis" is whichever of this surface's two in-plane local
+     * axes actually varies across the surface's width/height (floor/
+     * ceiling: local X; walls: local Y) — exactly one of vSurfaceUV.x/.y
+     * is always near-zero for any given surface (the thin "thickness"
+     * axis), so summing them cleanly picks out the meaningful one
+     * without a per-surface flag.
+     */
+    float secondaryAxis = vSurfaceUV.x + vSurfaceUV.y;
+    vec2  planeXZ        = vec2(secondaryAxis, vLocalZ);   // this surface's flow plane, analogous to FLOW_FRAG's vWorldPos.xz
+    vec2  spherePos2D    = vec2(0.0, uSpherePosZ);          // the sphere always sits at secondaryAxis=0 (tunnel centerline) in corridor-local space
+
+    // Reactive only in the tunnel's first uReactivePortion — smoothstepped
+    // over a short band so there's no visible seam at the boundary.
     float reactiveZone = 1.0 - smoothstep(uReactivePortion - 0.06, uReactivePortion, vPatternT);
-    float compress = uDopplerCompress * falloff * reactiveZone;
 
-    // ── Flow-style iso-lines running along the tunnel's length ──────
-    // Same spirit as FLOW_FRAG's iso-contour bands: fbm warp + a
-    // periodic function whose local frequency rises near the sphere.
-    float warp     = fbm(vSurfaceUV * 0.12 + vec2(vLocalZ * 0.02, uTime * 0.05)) - 0.5;
-    // NOTE: retuned from the plan's literal compress * 0.12 factor — at
-    // that value the frequency swing between "sphere just passed through
-    // fast" and "sphere idle" was empirically too subtle to read on
-    // screen (verified via Playwright pixel-sampling: near-identical
-    // line profiles). 0.45 makes the compression clearly visible without
-    // going so far it reads as noise/moire at full uDopplerCompress.
-    float lineFreq = 0.55 + compress * 0.45;
-    float lp       = fract(vLocalZ * lineFreq + warp * 1.4 + uTime * 0.12);
+    vec2  delta   = planeXZ - spherePos2D;
+    float trueR2  = dot(delta, delta) + 0.0001;
+    // In the calm zone, blend the DISTANCE term itself toward "very far"
+    // rather than just damping the compression's magnitude — potential
+    // flow naturally straightens to parallel, undisturbed lines far from
+    // the deflection point (exactly what FLOW_FRAG looks like at
+    // progress=0, sphere far from a given patch of the plane), so this
+    // reuses the SAME formula to genuinely reproduce that look, rather
+    // than an artificial separate "calm" code path. This also means the
+    // calm zone truly ignores the sphere's actual position, not just its
+    // magnitude — regardless of how close the sphere physically gets.
+    float effectiveR2 = mix(1.0e6, trueR2, reactiveZone);
+    float r            = sqrt(effectiveR2);
+
+    /* Flow direction: mostly along the tunnel's length, with a slight
+     * cross-component so the curve reads as directional, not perfectly
+     * symmetric (mirrors FLOW_FRAG's diagonal U vector). */
+    vec2  U      = normalize(vec2(0.22, 1.0));
+    float Ucross = U.x * delta.y - U.y * delta.x;
+
+    float R    = uLength * 0.09; // deflection radius, scaled to this tunnel's own size
+    float psi  = Ucross * (1.0 - (R * R) / effectiveR2);
+
+    // Organic fbm warp — fades out with distance from the (effective)
+    // deflection point, same as FLOW_FRAG's farBlend.
+    float farBlend = smoothstep(0.0, R * 5.0, r);
+    float warp     = (fbm(planeXZ * 0.09 + vec2(uTime * 0.05, uTime * 0.03)) - 0.5) * 0.85 * farBlend;
+    psi += warp;
+
+    // Doppler-compression line-frequency swing — also gated by
+    // reactiveZone so the calm zone's line spacing never pulses.
+    float compress = uDopplerCompress * reactiveZone;
+    float lineFreq = 5.5 + compress * 0.9;
     float lw       = 0.10;
-    float band     = smoothstep(0.0, lw, lp) * smoothstep(2.0 * lw, lw, lp);
-    band           = pow(band, 0.6);
+    float lp       = fract(psi * lineFreq + uTime * 0.10);
+    float line     = smoothstep(0.0, lw, lp) * smoothstep(2.0 * lw, lw, lp);
+    line           = pow(line, 0.55);
 
-    vec3 patCol = mix(uPatternColorA, uPatternColorB, fract(vLocalZ * 0.01 + uTime * 0.015));
-    vec3 color  = mix(vec3(0.03, 0.02, 0.07), patCol, band);
+    vec3  lineCol = mix(uPatternColorA, uPatternColorB, fract(secondaryAxis * 0.02 + uTime * 0.02));
+    // Subtle glow right where the sphere is (gated by the same effective
+    // distance, so it only appears in the reactive zone).
+    float nearSph = 1.0 - smoothstep(0.0, R * 1.6, r);
+    lineCol       = mix(lineCol, uPatternColorB * 1.4 + vec3(0.15), nearSph * 0.5);
+
+    vec3 bg    = vec3(0.03, 0.02, 0.07);
+    vec3 color = mix(bg, lineCol * 1.1, line);
 
     // Simple fake directional lighting so floor/ceiling/walls read as
     // distinct 3D surfaces instead of one flat, unlit color fill — this
