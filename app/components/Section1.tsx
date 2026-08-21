@@ -947,7 +947,7 @@ export default function Section1() {
         // envelope as the main scroll text blocks (computeBlockOpacity),
         // but driven by how far the sphere has traveled through the
         // corridor (corridorTravelT) instead of page-scroll instance.
-        const corridorInstance = corridorTravelT * CORRIDOR_TEXT_BLOCK_SEGMENTS;
+        const corridorInstance = corridorTravelT * CORRIDOR_TEXT_BLOCK_SEGMENTS * TEXT_BLOCK_DURATION_INSTANCES;
         const segmentLength = corridor.length / CORRIDOR_TEXT_BLOCK_SEGMENTS;
         const camForward = new THREE.Vector3();
         camera.getWorldDirection(camForward);
@@ -963,13 +963,13 @@ export default function Section1() {
             return;
           }
           const projected = anchor.clone().project(camera);
-          const leftEdge2D  = anchor.clone().add(new THREE.Vector3(-corridor.crossSection * 0.42, 0, 0)).project(camera);
-          const rightEdge2D = anchor.clone().add(new THREE.Vector3( corridor.crossSection * 0.42, 0, 0)).project(camera);
+          const leftEdge2D  = anchor.clone().add(new THREE.Vector3(-corridor.crossSection * EDGE_FRACTION, 0, 0)).project(camera);
+          const rightEdge2D = anchor.clone().add(new THREE.Vector3( corridor.crossSection * EDGE_FRACTION, 0, 0)).project(camera);
           const wallWidthPx = Math.abs(rightEdge2D.x - leftEdge2D.x) * 0.5 * window.innerWidth;
           el.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
           el.style.top  = `${(-projected.y * 0.5 + 0.5) * window.innerHeight}px`;
           el.style.maxWidth = `${Math.max(120, wallWidthPx)}px`;
-          el.style.opacity = String(computeBlockOpacity(corridorInstance, i - 1, TEXT_BLOCK_DURATION_INSTANCES));
+          el.style.opacity = String(computeBlockOpacity(corridorInstance, i * TEXT_BLOCK_DURATION_INSTANCES, TEXT_BLOCK_DURATION_INSTANCES));
         });
       } else if (endLinkRef.current) {
         endLinkRef.current.style.opacity = '0';
