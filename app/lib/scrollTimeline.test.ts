@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { computeBlockOpacity, computeScrollInstance } from './scrollTimeline';
+import {
+  computeBlockOpacity,
+  computeScrollInstance,
+  corridorBlockStartInstance,
+  corridorInstanceFromTravel,
+} from './scrollTimeline';
 
 describe('computeScrollInstance', () => {
   it('is 0 at the top of the container', () => {
@@ -37,5 +42,49 @@ describe('computeBlockOpacity', () => {
   it('is 0 after the block finishes', () => {
     expect(computeBlockOpacity(5, 2)).toBe(0);
     expect(computeBlockOpacity(9, 2)).toBe(0);
+  });
+});
+
+describe('corridor text block timing', () => {
+  // Mirrors the corridor's real config: CORRIDOR_TEXT_BLOCK_SEGMENTS = 5,
+  // TEXT_BLOCK_DURATION_INSTANCES = 3, 4 corridor text blocks (i = 0..3).
+  const SEGMENTS = 5;
+  const DURATION = 3;
+  const NUM_BLOCKS = 4;
+
+  it('corridorInstanceFromTravel scales travelT (0..1) onto the segments*duration instance axis', () => {
+    expect(corridorInstanceFromTravel(0, SEGMENTS, DURATION)).toBe(0);
+    expect(corridorInstanceFromTravel(1, SEGMENTS, DURATION)).toBe(SEGMENTS * DURATION);
+    expect(corridorInstanceFromTravel(0.5, SEGMENTS, DURATION)).toBeCloseTo(7.5, 5);
+  });
+
+  it('corridorBlockStartInstance places block i at i * durationInstances', () => {
+    expect(corridorBlockStartInstance(0, DURATION)).toBe(0);
+    expect(corridorBlockStartInstance(1, DURATION)).toBe(3);
+    expect(corridorBlockStartInstance(2, DURATION)).toBe(6);
+  });
+
+  // This is the exact invariant that regressed once already (fixed in
+  // commit 53a46de): with the old formula (corridorInstance = travelT *
+  // segments, startInstance = i - 1), block i's HOLD window landed on
+  // the same instance range as block i+1's RAMP-IN window, so adjacent
+  // corridor text blocks were visibly on screen at the same time.
+  it('adjacent corridor blocks have non-overlapping [start, start+duration) windows', () => {
+    for (let i = 0; i < NUM_BLOCKS - 1; i++) {
+      const thisWindowEnd = corridorBlockStartInstance(i, DURATION) + DURATION;
+      const nextWindowStart = corridorBlockStartInstance(i + 1, DURATION);
+      expect(thisWindowEnd).toBeLessThanOrEqual(nextWindowStart);
+    }
+  });
+
+  it('sweeping travelT across the full corridor (0..1) never shows two blocks at once', () => {
+    for (let step = 0; step <= 200; step++) {
+      const travelT = step / 200;
+      const instance = corridorInstanceFromTravel(travelT, SEGMENTS, DURATION);
+      const visibleCount = Array.from({ length: NUM_BLOCKS }, (_, i) =>
+        computeBlockOpacity(instance, corridorBlockStartInstance(i, DURATION), DURATION)
+      ).filter((opacity) => opacity > 0).length;
+      expect(visibleCount).toBeLessThanOrEqual(1);
+    }
   });
 });

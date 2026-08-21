@@ -30,3 +30,37 @@ export function computeBlockOpacity(
   if (t < durationInstances - 1) return 1;
   return Math.max(0, durationInstances - t);
 }
+
+/**
+ * Maps how far the sphere has traveled through the corridor (0..1) onto
+ * the same "instance" axis computeBlockOpacity expects, scaled so each
+ * of `segments` equal-length corridor segments maps to exactly one
+ * `durationInstances`-wide, non-overlapping opacity window (see
+ * corridorBlockStartInstance below for why this specific scaling
+ * matters).
+ */
+export function corridorInstanceFromTravel(
+  travelT: number,
+  segments: number,
+  durationInstances: number
+): number {
+  return travelT * segments * durationInstances;
+}
+
+/**
+ * The `startInstance` for corridor text block `i`, paired with
+ * corridorInstanceFromTravel() above and computeBlockOpacity(). Giving
+ * block i an EXCLUSIVE `durationInstances`-wide window starting at
+ * `i * durationInstances` — rather than spacing blocks only 1 unit
+ * apart — is what makes adjacent blocks' opacity windows never overlap:
+ * block i's window is exactly [i*durationInstances, (i+1)*durationInstances),
+ * which maps back to travelT range [i/segments, (i+1)/segments) — i.e.
+ * exactly segment i's own bounds, touching but never overlapping segment
+ * i-1 or i+1. (A prior version used `i - 1` on a `travelT * segments`
+ * axis instead — that put block i's HOLD window at the same range as
+ * block i+1's RAMP-IN window, so they visibly overlapped. Do not
+ * reintroduce that formula.)
+ */
+export function corridorBlockStartInstance(i: number, durationInstances: number): number {
+  return i * durationInstances;
+}

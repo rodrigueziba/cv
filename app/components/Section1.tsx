@@ -42,7 +42,12 @@ import {
   TEXT_BLOCK_DURATION_INSTANCES,
 } from '@/app/lib/sceneConfig';
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
-import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTimeline';
+import {
+  computeBlockOpacity,
+  computeScrollInstance,
+  corridorBlockStartInstance,
+  corridorInstanceFromTravel,
+} from '@/app/lib/scrollTimeline';
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
 import { AudioEngine } from '@/app/lib/audioEngine';
 import { stepContactAmount, stepFloorDopplerState, type DopplerFloorState } from '@/app/lib/audioMath';
@@ -947,7 +952,7 @@ export default function Section1() {
         // envelope as the main scroll text blocks (computeBlockOpacity),
         // but driven by how far the sphere has traveled through the
         // corridor (corridorTravelT) instead of page-scroll instance.
-        const corridorInstance = corridorTravelT * CORRIDOR_TEXT_BLOCK_SEGMENTS * TEXT_BLOCK_DURATION_INSTANCES;
+        const corridorInstance = corridorInstanceFromTravel(corridorTravelT, CORRIDOR_TEXT_BLOCK_SEGMENTS, TEXT_BLOCK_DURATION_INSTANCES);
         const segmentLength = corridor.length / CORRIDOR_TEXT_BLOCK_SEGMENTS;
         const camForward = new THREE.Vector3();
         camera.getWorldDirection(camForward);
@@ -969,7 +974,7 @@ export default function Section1() {
           el.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
           el.style.top  = `${(-projected.y * 0.5 + 0.5) * window.innerHeight}px`;
           el.style.maxWidth = `${Math.max(120, wallWidthPx)}px`;
-          el.style.opacity = String(computeBlockOpacity(corridorInstance, i * TEXT_BLOCK_DURATION_INSTANCES, TEXT_BLOCK_DURATION_INSTANCES));
+          el.style.opacity = String(computeBlockOpacity(corridorInstance, corridorBlockStartInstance(i, TEXT_BLOCK_DURATION_INSTANCES), TEXT_BLOCK_DURATION_INSTANCES));
         });
       } else if (endLinkRef.current) {
         endLinkRef.current.style.opacity = '0';
@@ -1325,7 +1330,7 @@ export default function Section1() {
               pointerEvents: 'none',
               userSelect: 'none',
               textAlign: 'center',
-              color: '#ffffff',
+              color: TEXT_BLOCKS[0].color,
               fontFamily: 'var(--font-michroma), sans-serif',
               fontSize: TEXT_BLOCKS[0].fontSizeClamp,
               letterSpacing: TEXT_BLOCKS[0].letterSpacing,
