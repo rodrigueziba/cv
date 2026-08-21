@@ -64,7 +64,7 @@ export const TEXT_BLOCK_DURATION_INSTANCES = 3;
 
 export type TextBlockAlignment = 'left' | 'center' | 'right' | 'justify';
 
-export const DEFAULT_TEXT_BLOCK_ALIGNMENT: TextBlockAlignment = 'justify';
+export const DEFAULT_TEXT_BLOCK_ALIGNMENT: TextBlockAlignment = 'center';
 
 export interface TextBlockConfig {
   id: string;
@@ -363,9 +363,9 @@ export const FREE_CAMERA_CONFIG = {
  * from there live. See SceneControlsContext.tsx for the React state
  * these drive, and DebugMenu.tsx for the UI.                        */
 export const DEBUG_RANGES = {
-  textBlockFontSizeMultiplier: { min: 0.5, max: 2.0, default: 1.0, step: 0.05 },
-  textBlockShadowSizeMultiplier: { min: 0, max: 3, default: 1.0, step: 0.1 },
-  textBlockShadowIntensityMultiplier: { min: 0, max: 2, default: 1.0, step: 0.05 },
+  textBlockFontSizeMultiplier: { min: 0.5, max: 2.0, default: 1.30, step: 0.05 },
+  textBlockShadowSizeMultiplier: { min: 0, max: 3, default: 1.70, step: 0.1 },
+  textBlockShadowIntensityMultiplier: { min: 0, max: 2, default: 2.0, step: 0.05 },
   cameraFovDeg: { min: 30, max: 120, default: 65, step: 1 },
   pitchInertiaMultiplier: { min: 0.2, max: 3, default: 1.0, step: 0.05 },
   floorDopplerIntensityMultiplier: { min: 0, max: 3, default: 1.0, step: 0.05 },
