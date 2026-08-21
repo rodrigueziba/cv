@@ -351,6 +351,10 @@ export default function Section1() {
   const mouseRef      = useRef({ x: 0, y: 0 });
   const textBlockRefs = useRef<HTMLDivElement[]>([]);
   const corridorTextRefs = useRef<HTMLDivElement[]>([]);
+  // Locked wrap width (px) per corridor text block, set the first frame the
+  // block becomes visible and reused for the rest of its visible lifetime —
+  // see the insideCorridorPhase loop below for why.
+  const corridorTextMaxWidthRef = useRef<(number | null)[]>([null, null, null, null]);
   const scrollInstanceRef = useRef(0); // raw scroll timeline position, in "instances"
   const audioEngineRef = useRef<AudioEngine | null>(null);
   // Lets the uploadedFileUrl effect below check the CURRENT mode without
@@ -963,26 +967,43 @@ export default function Section1() {
           const anchor = corridor.entrance.clone().add(new THREE.Vector3(0, corridor.crossSection / 2, blockLocalZ));
           const toAnchor = anchor.clone().sub(camera.position);
           const inFront = toAnchor.dot(camForward) > 0;
-          if (!inFront) {
+          const opacity = inFront
+            ? computeBlockOpacity(corridorInstance, corridorBlockStartInstance(i, TEXT_BLOCK_DURATION_INSTANCES), TEXT_BLOCK_DURATION_INSTANCES)
+            : 0;
+          if (opacity <= 0) {
             el.style.opacity = '0';
+            // Not visible — clear the locked wrap width so the NEXT time
+            // this block appears it re-measures fresh rather than reusing
+            // a stale value from a previous appearance.
+            corridorTextMaxWidthRef.current[i] = null;
             return;
           }
           const projected = anchor.clone().project(camera);
-          const leftEdge2D  = anchor.clone().add(new THREE.Vector3(-corridor.crossSection * EDGE_FRACTION, 0, 0)).project(camera);
-          const rightEdge2D = anchor.clone().add(new THREE.Vector3( corridor.crossSection * EDGE_FRACTION, 0, 0)).project(camera);
-          const wallWidthPx = Math.abs(rightEdge2D.x - leftEdge2D.x) * 0.5 * window.innerWidth;
           el.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
           el.style.top  = `${(-projected.y * 0.5 + 0.5) * window.innerHeight}px`;
-          el.style.maxWidth = `${Math.max(120, wallWidthPx)}px`;
-          el.style.opacity = String(computeBlockOpacity(corridorInstance, corridorBlockStartInstance(i, TEXT_BLOCK_DURATION_INSTANCES), TEXT_BLOCK_DURATION_INSTANCES));
+          // Lock the wrap width on the FIRST frame this block becomes
+          // visible, then reuse it for the rest of its visible lifetime.
+          // Recomputing this every frame (the tunnel's projected width at
+          // the anchor's depth, which shrinks as the chase camera
+          // approaches) made the text visibly re-wrap mid-fade — jarring
+          // and hard to read.
+          if (corridorTextMaxWidthRef.current[i] === null) {
+            const leftEdge2D  = anchor.clone().add(new THREE.Vector3(-corridor.crossSection * EDGE_FRACTION, 0, 0)).project(camera);
+            const rightEdge2D = anchor.clone().add(new THREE.Vector3( corridor.crossSection * EDGE_FRACTION, 0, 0)).project(camera);
+            const wallWidthPx = Math.abs(rightEdge2D.x - leftEdge2D.x) * 0.5 * window.innerWidth;
+            corridorTextMaxWidthRef.current[i] = Math.max(120, wallWidthPx);
+          }
+          el.style.maxWidth = `${corridorTextMaxWidthRef.current[i]}px`;
+          el.style.opacity = String(opacity);
         });
       } else if (endLinkRef.current) {
         endLinkRef.current.style.opacity = '0';
         endLinkRef.current.style.pointerEvents = 'none';
         endLinkRef.current.tabIndex = -1;
         endLinkRef.current.setAttribute('aria-hidden', 'true');
-        corridorTextRefs.current.forEach((el) => {
+        corridorTextRefs.current.forEach((el, i) => {
           if (el) el.style.opacity = '0';
+          corridorTextMaxWidthRef.current[i] = null;
         });
       }
 
