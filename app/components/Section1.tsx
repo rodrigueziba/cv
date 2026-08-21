@@ -597,17 +597,18 @@ export default function Section1() {
     scene.add(starPoints);
 
     /* ── Corridor-entrance star field ──────────────────────────────
-     * The disc star field above is anchored near world Y∈[0,80] around
-     * the main scenario — far above the corridor (CORRIDOR_CONFIG.yOffset
-     * = -80), so it's never in view once the camera teleports down there.
-     * This is a second, smaller field positioned in the corridor's own
-     * local space (added as a child of corridor.group, so it moves with
-     * it automatically), reusing the SAME material/uniforms as the disc
-     * field — same shader, same random-brightness twinkle, for free —
-     * just different geometry/positions. Placed above and a bit behind
-     * the tunnel entrance (local +Z, since the tunnel extends toward -Z),
-     * matching where the very first corridor-phase camera position
-     * (behind + above the sphere, chase-cam) actually looks. */
+     * The disc star field above now follows the camera (see the
+     * starPoints.position.copy(camera.position) call in animate()), so
+     * it does still show up once the camera teleports into the corridor.
+     * This is a second, additional field positioned in the corridor's
+     * own local space (added as a child of corridor.group, so it moves
+     * with it automatically) — denser and art-directed specifically for
+     * the tunnel's local scale, reusing the SAME material/uniforms as
+     * the disc field — same shader, same random-brightness twinkle, for
+     * free — just different geometry/positions. Placed above and a bit
+     * behind the tunnel entrance (local +Z, since the tunnel extends
+     * toward -Z), matching where the very first corridor-phase camera
+     * position (behind + above the sphere, chase-cam) actually looks. */
     const CORRIDOR_STAR_COUNT = 200;
     const csPosArr   = new Float32Array(CORRIDOR_STAR_COUNT * 3);
     const csPhaseArr = new Float32Array(CORRIDOR_STAR_COUNT);
@@ -769,7 +770,6 @@ export default function Section1() {
       sphUniforms.uTime.value      = time;
       sphUniforms.uProgress.value  = progress;
       starUniforms.uTime.value     = time;
-      starPoints.position.copy(camera.position);
 
       /* Scroll-timeline gating: the final phase begins the instant scroll
        * passes the last text block — a hard teleport to the corridor
@@ -902,6 +902,7 @@ export default function Section1() {
         applyCorridorCamera(sphere.position);
       }
       wasFreeCameraEnabledRef.current = freeCameraEnabledRef.current;
+      starPoints.position.copy(camera.position);
 
       /* End-of-corridor link — only relevant, and only projected, while
        * actually inside the corridor. */

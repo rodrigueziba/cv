@@ -357,11 +357,13 @@ export const FREE_CAMERA_CONFIG = {
 };
 
 /* ── DEBUG-MENU SLIDER RANGES ───────────────────────────────────────
- * min/max/default for every new debug-adjustable multiplier. The
- * "default" here is the multiplier's neutral value (1.0 = matches the
+ * min/max/default for every new debug-adjustable multiplier. Most
+ * entries default to the multiplier's neutral value (1.0 = matches the
  * static config above exactly); sliders let the user scale up/down
- * from there live. See SceneControlsContext.tsx for the React state
- * these drive, and DebugMenu.tsx for the UI.                        */
+ * from there live. The 3 textBlock* entries are the exception — their
+ * defaults were deliberately tuned to non-neutral values (1.30/1.70/
+ * 2.0) rather than left at 1.0. See SceneControlsContext.tsx for the
+ * React state these drive, and DebugMenu.tsx for the UI.            */
 export const DEBUG_RANGES = {
   textBlockFontSizeMultiplier: { min: 0.5, max: 2.0, default: 1.30, step: 0.05 },
   textBlockShadowSizeMultiplier: { min: 0, max: 3, default: 1.70, step: 0.1 },

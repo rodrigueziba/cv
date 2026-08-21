@@ -64,17 +64,7 @@ const PATTERN_FRAG = /* glsl */ `
 
     vec2  delta   = planeXZ - spherePos2D;
     float trueR2  = dot(delta, delta) + 0.0001;
-    // In the calm zone, blend the DISTANCE term itself toward "very far"
-    // rather than just damping the compression's magnitude — potential
-    // flow naturally straightens to parallel, undisturbed lines far from
-    // the deflection point (exactly what FLOW_FRAG looks like at
-    // progress=0, sphere far from a given patch of the plane), so this
-    // reuses the SAME formula to genuinely reproduce that look, rather
-    // than an artificial separate "calm" code path. This also means the
-    // calm zone truly ignores the sphere's actual position, not just its
-    // magnitude — regardless of how close the sphere physically gets.
-    float effectiveR2 = mix(1.0e6, trueR2, reactiveZone);
-    float r            = sqrt(effectiveR2);
+    float r       = sqrt(trueR2);
 
     /* Flow direction: mostly along the tunnel's length, with a slight
      * cross-component so the curve reads as directional, not perfectly
@@ -83,11 +73,22 @@ const PATTERN_FRAG = /* glsl */ `
     float Ucross = U.x * delta.y - U.y * delta.x;
 
     float R    = uLength * 0.09; // deflection radius, scaled to this tunnel's own size
-    float psi  = Ucross * (1.0 - (R * R) / effectiveR2);
+    // In the calm zone, fade the DEFLECTION STRENGTH toward 0 (not the
+    // distance term toward "very far") — this is a genuinely continuous
+    // blend (unlike mixing 1e6 against an O(1)-O(100) trueR2, which
+    // collapsed into a near-instant step and produced a hard seam at the
+    // reactiveZone boundary). At reactiveZone==0 this still reduces
+    // exactly to psi = Ucross — straight, undisturbed, sphere-position-
+    // independent lines — so the calm zone's curvature still has zero
+    // dependence on the sphere's actual proximity, same guarantee as
+    // before, just implemented without the seam.
+    float deflect  = reactiveZone * (R * R) / trueR2;
+    float psi      = Ucross * (1.0 - deflect);
 
-    // Organic fbm warp — fades out with distance from the (effective)
-    // deflection point, same as FLOW_FRAG's farBlend.
-    float farBlend = smoothstep(0.0, R * 5.0, r);
+    // Organic fbm warp — fades out with distance from the deflection
+    // point AND with reactiveZone, same as FLOW_FRAG's farBlend but also
+    // gated so the calm zone never shows warp either.
+    float farBlend = mix(1.0, smoothstep(0.0, R * 5.0, r), reactiveZone);
     float warp     = (fbm(planeXZ * 0.09 + vec2(uTime * 0.05, uTime * 0.03)) - 0.5) * 0.85 * farBlend;
     psi += warp;
 
@@ -103,7 +104,7 @@ const PATTERN_FRAG = /* glsl */ `
     vec3  lineCol = mix(uPatternColorA, uPatternColorB, fract(secondaryAxis * 0.02 + uTime * 0.02));
     // Subtle glow right where the sphere is (gated by the same effective
     // distance, so it only appears in the reactive zone).
-    float nearSph = 1.0 - smoothstep(0.0, R * 1.6, r);
+    float nearSph = reactiveZone * (1.0 - smoothstep(0.0, R * 1.6, r));
     lineCol       = mix(lineCol, uPatternColorB * 1.4 + vec3(0.15), nearSph * 0.5);
 
     vec3 bg    = vec3(0.03, 0.02, 0.07);
