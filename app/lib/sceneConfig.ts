@@ -30,7 +30,7 @@ export function shadowToCss(s: TextShadowConfig, sizeMult = 1, intensityMult = 1
  * "EFFECTO DOPPLER" — plain Michroma text, white with a short black
  * shadow for contrast. Edit ANY of these to restyle the title.       */
 export const TITLE_CONFIG = {
-  text: 'EFFECTO DOPPLER',
+  text: 'EFECTO DOPPLER',
   fontSizeClamp: 'clamp(24px, 4.2vw, 64px)', // min, preferred, max
   letterSpacing: '0.28em',
   textAlign: 'center' as const,
@@ -102,7 +102,7 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
       'SI LA FUENTE SE ACERCA,',
       'LAS ONDAS SE COMPRIMEN',
       'Y EL SONIDO SE PERCIBE',
-      'MAS AGUDO',
+      'MÁS AGUDO',
     ],
     startInstance: 4,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
@@ -117,7 +117,7 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
       'SI LA FUENTE SE ALEJA,',
       'LAS ONDAS SE ESPACIAN',
       'Y EL SONIDO SE PERCIBE',
-      'MAS GRAVE',
+      'MÁS GRAVE',
     ],
     startInstance: 7,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
@@ -129,9 +129,9 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
   {
     id: 'block-4',
     lines: [
-      'MOVE EL MOUSE PARA GUIAR',
+      'MOVÉ EL MOUSE PARA GUIAR',
       'LA ESFERA SOBRE EL ESCENARIO',
-      'Y ESCUCHA COMO CAMBIA',
+      'Y ESCUCHÁ CÓMO CAMBIA',
       'EL SONIDO EN TIEMPO REAL',
     ],
     startInstance: 10,
@@ -144,10 +144,10 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
   {
     id: 'block-5',
     lines: [
-      'SEGUI SCROLLEANDO',
+      'SEGUÍ SCROLLEANDO',
       'PARA ENTRAR AL PASILLO',
       'Y LLEGAR A LA',
-      'SIMULACION COMPLETA',
+      'SIMULACIÓN COMPLETA',
     ],
     startInstance: 13,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
@@ -333,7 +333,7 @@ export const CORRIDOR_CONFIG = {
   // End-wall red→blue colors are NOT duplicated here — they live in
   // DEFAULT_SCENE_COLORS.corridorWallStart/End above, the single
   // source of truth the debug menu's color pickers also read/write.
-  finalLinkText: 'IR A LA SIMULACION',
+  finalLinkText: 'IR A LA SIMULACIÓN',
   finalLinkUrl: 'https://efectodoppler.vercel.app',
   reachedThreshold: 0.97, // corridorTravelT at/above which the sphere is considered "arrived" at the end wall
   /** World Y the corridor sits at — far enough below the main disc
@@ -365,7 +365,7 @@ export const FREE_CAMERA_CONFIG = {
  * 2.0) rather than left at 1.0. See SceneControlsContext.tsx for the
  * React state these drive, and DebugMenu.tsx for the UI.            */
 export const DEBUG_RANGES = {
-  textBlockFontSizeMultiplier: { min: 0.5, max: 2.0, default: 1.30, step: 0.05 },
+  textBlockFontSizeMultiplier: { min: 0.5, max: 2.0, default: 1.40, step: 0.05 },
   textBlockShadowSizeMultiplier: { min: 0, max: 3, default: 1.70, step: 0.1 },
   textBlockShadowIntensityMultiplier: { min: 0, max: 2, default: 2.0, step: 0.05 },
   cameraFovDeg: { min: 30, max: 120, default: 65, step: 1 },

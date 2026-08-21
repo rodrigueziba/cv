@@ -165,7 +165,7 @@ export default function DebugMenu() {
           </div>
           <button
             onClick={() => setOpen(false)}
-            aria-label="Cerrar menu de debug"
+            aria-label="Cerrar menú de debug"
             style={{
               background: 'rgba(255,255,255,0.08)',
               border: '1px solid rgba(255,255,255,0.2)',
@@ -183,7 +183,7 @@ export default function DebugMenu() {
             ✕
           </button>
         </div>
-        <div style={{ opacity: 0.5, marginBottom: 12 }}>(Shift para cerrar tambien)</div>
+        <div style={{ opacity: 0.5, marginBottom: 12 }}>(Shift para cerrar también)</div>
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontFamily: michroma, fontWeight: 400, marginBottom: 6 }}>Paletas</div>
