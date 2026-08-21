@@ -561,11 +561,17 @@ export default function Section1() {
     const sSizeArr   = new Float32Array(STAR_COUNT);
     for (let i = 0; i < STAR_COUNT; i++) {
       const theta    = Math.random() * Math.PI * 2;
-      const cosP     = 0.04 + Math.random() * 0.96;   // upper hemisphere
-      const sinP     = Math.sqrt(1 - cosP * cosP);
-      const radius   = 30 + Math.random() * 25;        // closer: 30–55 units
+      // Full sphere (was upper-hemisphere-only, world-anchored) — the
+      // field is repositioned onto the camera every frame below, so it
+      // needs to surround the viewer in every direction; the flow
+      // plane's own opaque geometry naturally occludes whichever
+      // hemisphere would otherwise read as "underground" via ordinary
+      // depth testing, so no visibility logic is needed here.
+      const cosP     = -1 + Math.random() * 2;
+      const sinP     = Math.sqrt(Math.max(0, 1 - cosP * cosP));
+      const radius   = 30 + Math.random() * 25;        // 30–55 units from the camera
       sPosArr[i*3]   = Math.cos(theta) * sinP * radius;
-      sPosArr[i*3+1] = Math.abs(cosP) * radius + 1.5; // always above horizon
+      sPosArr[i*3+1] = cosP * radius;
       sPosArr[i*3+2] = Math.sin(theta) * sinP * radius;
       sPhaseArr[i]   = Math.random();
       sSizeArr[i]    = 3.0 + Math.random() * 5.0;      // larger points
@@ -587,7 +593,8 @@ export default function Section1() {
       depthWrite:     false,
       fog:            false,        // stars ignore scene fog
     });
-    scene.add(new THREE.Points(starGeo, starMat));
+    const starPoints = new THREE.Points(starGeo, starMat);
+    scene.add(starPoints);
 
     /* ── Corridor-entrance star field ──────────────────────────────
      * The disc star field above is anchored near world Y∈[0,80] around
@@ -762,6 +769,7 @@ export default function Section1() {
       sphUniforms.uTime.value      = time;
       sphUniforms.uProgress.value  = progress;
       starUniforms.uTime.value     = time;
+      starPoints.position.copy(camera.position);
 
       /* Scroll-timeline gating: the final phase begins the instant scroll
        * passes the last text block — a hard teleport to the corridor
