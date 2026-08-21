@@ -347,6 +347,24 @@ export const CORRIDOR_CONFIG = {
   chaseHeightMultiplier: 1.3, // was 2 — less steep downward pitch onto the sphere
 };
 
+/* ── CORRIDOR FLOATING TEXT BLOCKS ─────────────────────────────────
+ * 4 short narrative lines that float inside the corridor, centered
+ * in its cross-section (midway between both walls and between floor
+ * and ceiling — not on a wall, unlike the end-of-corridor link).
+ * Styling (font/size/shadow) is intentionally NOT duplicated here —
+ * Section1.tsx reads it directly from TEXT_BLOCKS[0], which all 5
+ * main text blocks already share identically. Positioning/timing
+ * logic also lives in Section1.tsx (it needs the corridor's runtime
+ * length, only known once buildCorridor() runs). */
+export const CORRIDOR_TEXT_BLOCK_SEGMENTS = 5; // the corridor's length is divided into this many equal parts
+
+export const CORRIDOR_TEXT_BLOCKS: string[] = [
+  'EL EFECTO DOPPLER NO SÓLO AFECTA A LAS ONDAS ACÚSTICAS.',
+  'TAMBIÉN SE DESCUBRIÓ QUE AFECTA A LAS ONDAS VISIBLES COMO LA LUZ.',
+  'CUANDO LAS GALAXIAS O ESTRELLAS SE ALEJAN DE NOSOTROS, SU LUZ SE VE ROJA.',
+  'Y A MEDIDA QUE SE ACERCAN, SE VEN MÁS AZULES.',
+];
+
 /* ── FREE CAMERA (debug menu toggle) ───────────────────────────────
  * WASD + Q/E fly-camera, mouse-look. See Section1.tsx for the
  * movement/look implementation.                                     */

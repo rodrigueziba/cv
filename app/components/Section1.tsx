@@ -37,6 +37,9 @@ import {
   SPACE_PROMPT_CONFIG,
   TITLE_HIDE_TRIGGER_INSTANCE,
   FREE_CAMERA_CONFIG,
+  CORRIDOR_TEXT_BLOCKS,
+  CORRIDOR_TEXT_BLOCK_SEGMENTS,
+  TEXT_BLOCK_DURATION_INSTANCES,
 } from '@/app/lib/sceneConfig';
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
 import { computeBlockOpacity, computeScrollInstance } from '@/app/lib/scrollTimeline';
@@ -321,6 +324,9 @@ export default function Section1() {
     corridorWaveSpeedMultiplier,
     cameraFovDeg,
     freeCameraEnabled,
+    textBlockFontSizeMultiplier,
+    textBlockShadowSizeMultiplier,
+    textBlockShadowIntensityMultiplier,
   } = useSceneControls();
 
   const [titleVisible, setTitleVisible] = useState(true);
@@ -339,6 +345,7 @@ export default function Section1() {
   const scrollRef     = useRef(0);
   const mouseRef      = useRef({ x: 0, y: 0 });
   const textBlockRefs = useRef<HTMLDivElement[]>([]);
+  const corridorTextRefs = useRef<HTMLDivElement[]>([]);
   const scrollInstanceRef = useRef(0); // raw scroll timeline position, in "instances"
   const audioEngineRef = useRef<AudioEngine | null>(null);
   // Lets the uploadedFileUrl effect below check the CURRENT mode without
@@ -935,11 +942,43 @@ export default function Section1() {
           endLinkRef.current.tabIndex = reached ? 0 : -1;
           endLinkRef.current.setAttribute('aria-hidden', reached ? 'false' : 'true');
         }
+
+        // Floating narrative text blocks — same fade-in/hold/fade-out
+        // envelope as the main scroll text blocks (computeBlockOpacity),
+        // but driven by how far the sphere has traveled through the
+        // corridor (corridorTravelT) instead of page-scroll instance.
+        const corridorInstance = corridorTravelT * CORRIDOR_TEXT_BLOCK_SEGMENTS;
+        const segmentLength = corridor.length / CORRIDOR_TEXT_BLOCK_SEGMENTS;
+        const camForward = new THREE.Vector3();
+        camera.getWorldDirection(camForward);
+        CORRIDOR_TEXT_BLOCKS.forEach((_text, i) => {
+          const el = corridorTextRefs.current[i];
+          if (!el) return;
+          const blockLocalZ = -(i + 0.5) * segmentLength;
+          const anchor = corridor.entrance.clone().add(new THREE.Vector3(0, corridor.crossSection / 2, blockLocalZ));
+          const toAnchor = anchor.clone().sub(camera.position);
+          const inFront = toAnchor.dot(camForward) > 0;
+          if (!inFront) {
+            el.style.opacity = '0';
+            return;
+          }
+          const projected = anchor.clone().project(camera);
+          const leftEdge2D  = anchor.clone().add(new THREE.Vector3(-corridor.crossSection * 0.42, 0, 0)).project(camera);
+          const rightEdge2D = anchor.clone().add(new THREE.Vector3( corridor.crossSection * 0.42, 0, 0)).project(camera);
+          const wallWidthPx = Math.abs(rightEdge2D.x - leftEdge2D.x) * 0.5 * window.innerWidth;
+          el.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
+          el.style.top  = `${(-projected.y * 0.5 + 0.5) * window.innerHeight}px`;
+          el.style.maxWidth = `${Math.max(120, wallWidthPx)}px`;
+          el.style.opacity = String(computeBlockOpacity(corridorInstance, i - 1, TEXT_BLOCK_DURATION_INSTANCES));
+        });
       } else if (endLinkRef.current) {
         endLinkRef.current.style.opacity = '0';
         endLinkRef.current.style.pointerEvents = 'none';
         endLinkRef.current.tabIndex = -1;
         endLinkRef.current.setAttribute('aria-hidden', 'true');
+        corridorTextRefs.current.forEach((el) => {
+          if (el) el.style.opacity = '0';
+        });
       }
 
       audioEngineRef.current?.setDopplerSpeed(sphereSpeed, dt);
@@ -1269,6 +1308,36 @@ export default function Section1() {
         >
           {CORRIDOR_CONFIG.finalLinkText}
         </a>
+
+        {/* ── Corridor floating text blocks — see CORRIDOR_TEXT_BLOCKS in sceneConfig.ts ── */}
+        {CORRIDOR_TEXT_BLOCKS.map((text, i) => (
+          <div
+            key={`corridor-text-${i}`}
+            ref={(el) => {
+              if (el) corridorTextRefs.current[i] = el;
+            }}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              zIndex: 10,
+              opacity: 0,
+              pointerEvents: 'none',
+              userSelect: 'none',
+              textAlign: 'center',
+              color: '#ffffff',
+              fontFamily: 'var(--font-michroma), sans-serif',
+              fontSize: TEXT_BLOCKS[0].fontSizeClamp,
+              letterSpacing: TEXT_BLOCKS[0].letterSpacing,
+              lineHeight: 1.6,
+              textShadow: shadowToCss(TEXT_BLOCKS[0].shadow, textBlockShadowSizeMultiplier, textBlockShadowIntensityMultiplier),
+              transform: `translate(-50%, -50%) scale(${textBlockFontSizeMultiplier})`,
+              transformOrigin: 'center',
+            }}
+          >
+            {text}
+          </div>
+        ))}
 
         {/* ── Animations ───────────────────────────────────────────── */}
         <style>{`
