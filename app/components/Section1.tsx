@@ -14,7 +14,7 @@
  *  80 – 100% │ Rotated 90° — flow appears to rise bottom → top
  */
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -50,7 +50,7 @@ import {
   corridorInstanceFromTravel,
 } from '@/app/lib/scrollTimeline';
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
-import { isMobileDevice } from '@/app/lib/mobileDetect';
+import { useIsMobile } from '@/app/lib/mobileDetect';
 import MobileGate from '@/app/components/MobileGate';
 import { requestMotionPermissionIfNeeded } from '@/app/lib/motionPermission';
 import { AudioEngine } from '@/app/lib/audioEngine';
@@ -323,22 +323,6 @@ const FINGERPRINT_SVG_PATHS = [
   'M50,82 L50,62',
 ];
 
-// isMobileDevice() reads navigator/window, so it necessarily differs
-// between the server (undefined window → false) and the client (actual
-// UA/pointer checks) — the classic case useSyncExternalStore's
-// getServerSnapshot param exists to solve. Using it here (rather than
-// deciding isMobile in a mount-effect setState) avoids a hydration
-// mismatch AND the extra render an effect-driven setState would cause.
-// Module-scope (not defined inside the component) so their identity is
-// stable across renders — isMobileDevice() itself never changes within a
-// session, so there's nothing to subscribe to.
-function subscribeToNothing() {
-  return () => {};
-}
-function getIsMobileServerSnapshot() {
-  return false;
-}
-
 export default function Section1() {
   const {
     colors,
@@ -364,10 +348,10 @@ export default function Section1() {
     setDebugMenuOpen,
   } = useSceneControls();
 
-  // See subscribeToNothing/getIsMobileServerSnapshot above — avoids a
+  // See useIsMobile's doc comment (app/lib/mobileDetect.ts) — avoids a
   // hydration mismatch that a lazy `useState(() => isMobileDevice())`
   // initializer would cause (server: false, client: actual UA result).
-  const isMobile = useSyncExternalStore(subscribeToNothing, isMobileDevice, getIsMobileServerSnapshot);
+  const isMobile = useIsMobile();
   // Mirrors `isMobile` for reads inside the mount effect's []-dep closure
   // (animate()'s steering code, and the deviceorientation/mousemove/touchmove
   // handlers below). A direct closure read of `isMobile` there would be
