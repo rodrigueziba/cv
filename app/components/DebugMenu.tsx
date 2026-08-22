@@ -132,6 +132,9 @@ export default function DebugMenu() {
         @media (max-width: 560px) {
           .dbgPanel { width: calc(100vw - 24px) !important; right: 12px !important; left: 12px !important; max-height: 85vh !important; }
         }
+        @media (max-width: 400px) {
+          .dbgPanel { top: 8px !important; padding: 10px !important; max-height: 90vh !important; font-size: 11px !important; }
+        }
       `}</style>
       <div
         ref={panelRef}

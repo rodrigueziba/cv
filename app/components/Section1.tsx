@@ -360,6 +360,8 @@ export default function Section1() {
     textBlockFontSizeMultiplier,
     textBlockShadowSizeMultiplier,
     textBlockShadowIntensityMultiplier,
+    debugMenuOpen,
+    setDebugMenuOpen,
   } = useSceneControls();
 
   // See subscribeToNothing/getIsMobileServerSnapshot above — avoids a
@@ -1449,6 +1451,34 @@ export default function Section1() {
               }
             }
           `}</style>
+        )}
+
+        {isMobile && !mobileGateOpen && (
+          <button
+            aria-label={MOBILE_CONFIG.hamburger.ariaLabel}
+            onClick={() => setDebugMenuOpen(!debugMenuOpen)}
+            style={{
+              position: 'absolute',
+              zIndex: 30,
+              top: `${MOBILE_CONFIG.hamburger.topPercent}%`,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 40,
+              height: 40,
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              opacity: 0.5,
+              filter: 'drop-shadow(1.5px 1.5px 0 rgba(0,0,0,0.85))',
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="100%" height="100%">
+              <rect x="3" y="6" width="18" height="2.4" rx="1.2" fill="#ffffff" />
+              <rect x="3" y="11" width="18" height="2.4" rx="1.2" fill="#ffffff" />
+              <rect x="3" y="16" width="18" height="2.4" rx="1.2" fill="#ffffff" />
+            </svg>
+          </button>
         )}
 
         {/* ── Scroll-timed text blocks — see app/lib/sceneConfig.ts TEXT_BLOCKS ── */}
