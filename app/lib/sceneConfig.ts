@@ -374,6 +374,42 @@ export const FREE_CAMERA_CONFIG = {
   maxPitchRad: Math.PI / 2 - 0.05, // clamp just short of straight up/down to avoid gimbal flip
 };
 
+/* ── MOBILE EXPERIENCE ─────────────────────────────────────────────
+ * All mobile-only UI (permission gate, sphere-control button,
+ * hamburger menu trigger, adaptive text safe-area) reads its layout
+ * values from here — see app/lib/mobileDetect.ts for how "mobile" is
+ * detected, and Section1.tsx / MobileGate.tsx / ScrollTextBlocks.tsx
+ * for where each value is consumed. */
+export const MOBILE_CONFIG = {
+  gateOverlay: {
+    ctaText: 'HABILITAR PERMISOS Y SONIDO E INICIAR LA EXPERIENCIA',
+    closeAriaLabel: 'Cerrar',
+  },
+  sphereButton: {
+    /** Portrait: centered horizontally, this % up from the bottom edge. */
+    portraitBottomPercent: 20,
+    /** Landscape: centered vertically, this % in from the right edge. */
+    landscapeRightPercent: 20,
+    sizePx: 64,
+    ariaLabel: 'Mantené presionado para mover la esfera inclinando el teléfono',
+  },
+  textSafeArea: {
+    /** Left/right margin, as a % of viewport width, on both orientations. */
+    sideMarginPercent: 15,
+    /** Top margin, as a % of viewport height, on both orientations. */
+    topMarginPercent: 15,
+    /** Portrait: extra clearance above the sphere-control button, and
+     * (by the same principle, applied consistently) landscape: extra
+     * clearance to the left of the sphere-control button's own margin. */
+    gapAroundButtonPercent: 10,
+  },
+  hamburger: {
+    /** From the top, horizontally centered, on both orientations. */
+    topPercent: 15,
+    ariaLabel: 'Abrir menú de debug',
+  },
+};
+
 /* ── DEBUG-MENU SLIDER RANGES ───────────────────────────────────────
  * min/max/default for every new debug-adjustable multiplier. Most
  * entries default to the multiplier's neutral value (1.0 = matches the

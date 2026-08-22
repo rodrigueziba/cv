@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
 import {
   DEFAULT_SCENE_COLORS,
@@ -72,9 +72,10 @@ function SliderRow({
  * small viewports (see the injected <style> block below).
  */
 export default function DebugMenu() {
-  const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const {
+    debugMenuOpen,
+    setDebugMenuOpen,
     colors,
     setColor,
     applyColorPreset,
@@ -114,13 +115,13 @@ export default function DebugMenu() {
       if (e.key !== 'Shift' || e.repeat) return;
       const target = e.target as Node | null;
       if (target && panelRef.current?.contains(target)) return;
-      setOpen((v) => !v);
+      setDebugMenuOpen(!debugMenuOpen);
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [debugMenuOpen, setDebugMenuOpen]);
 
-  if (!open) return null;
+  if (!debugMenuOpen) return null;
 
   const michroma = 'var(--font-michroma), sans-serif';
 
@@ -164,7 +165,7 @@ export default function DebugMenu() {
             DEBUG MENU
           </div>
           <button
-            onClick={() => setOpen(false)}
+            onClick={() => setDebugMenuOpen(false)}
             aria-label="Cerrar menú de debug"
             style={{
               background: 'rgba(255,255,255,0.08)',

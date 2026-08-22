@@ -41,6 +41,8 @@ interface SceneControlsValue {
 
   freeCameraEnabled: boolean;
   setFreeCameraEnabled: (v: boolean) => void;
+  debugMenuOpen: boolean;
+  setDebugMenuOpen: (v: boolean) => void;
   cameraFovDeg: number;
   setCameraFovDeg: (v: number) => void;
 
@@ -81,6 +83,7 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
   const [textBlockAlignment, setTextBlockAlignment] = useState<TextBlockAlignment>(DEFAULT_TEXT_BLOCK_ALIGNMENT);
 
   const [freeCameraEnabled, setFreeCameraEnabled] = useState(false);
+  const [debugMenuOpen, setDebugMenuOpen] = useState(false);
   const [cameraFovDeg, setCameraFovDeg] = useState(DEBUG_RANGES.cameraFovDeg.default);
 
   const [pitchInertiaMultiplier, setPitchInertiaMultiplier] = useState(
@@ -138,6 +141,8 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
       setTextBlockAlignment,
       freeCameraEnabled,
       setFreeCameraEnabled,
+      debugMenuOpen,
+      setDebugMenuOpen,
       cameraFovDeg,
       setCameraFovDeg,
       pitchInertiaMultiplier,
@@ -162,6 +167,7 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
       textBlockShadowIntensityMultiplier,
       textBlockAlignment,
       freeCameraEnabled,
+      debugMenuOpen,
       cameraFovDeg,
       pitchInertiaMultiplier,
       floorDopplerIntensityMultiplier,
