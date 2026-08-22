@@ -14,7 +14,7 @@
  *  80 – 100% │ Rotated 90° — flow appears to rise bottom → top
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -49,6 +49,8 @@ import {
   corridorInstanceFromTravel,
 } from '@/app/lib/scrollTimeline';
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
+import { isMobileDevice } from '@/app/lib/mobileDetect';
+import MobileGate from '@/app/components/MobileGate';
 import { AudioEngine } from '@/app/lib/audioEngine';
 import { stepContactAmount, stepFloorDopplerState, type DopplerFloorState } from '@/app/lib/audioMath';
 import { remapSubrange, corridorTravelDistance } from '@/app/lib/finalPhase';
@@ -311,6 +313,22 @@ const SPH_FRAG = /* glsl */`
    COMPONENT
 ═══════════════════════════════════════════════════════════════ */
 
+// isMobileDevice() reads navigator/window, so it necessarily differs
+// between the server (undefined window → false) and the client (actual
+// UA/pointer checks) — the classic case useSyncExternalStore's
+// getServerSnapshot param exists to solve. Using it here (rather than
+// deciding isMobile in a mount-effect setState) avoids a hydration
+// mismatch AND the extra render an effect-driven setState would cause.
+// Module-scope (not defined inside the component) so their identity is
+// stable across renders — isMobileDevice() itself never changes within a
+// session, so there's nothing to subscribe to.
+function subscribeToNothing() {
+  return () => {};
+}
+function getIsMobileServerSnapshot() {
+  return false;
+}
+
 export default function Section1() {
   const {
     colors,
@@ -333,6 +351,16 @@ export default function Section1() {
     textBlockShadowSizeMultiplier,
     textBlockShadowIntensityMultiplier,
   } = useSceneControls();
+
+  // See subscribeToNothing/getIsMobileServerSnapshot above — avoids a
+  // hydration mismatch that a lazy `useState(() => isMobileDevice())`
+  // initializer would cause (server: false, client: actual UA result).
+  const isMobile = useSyncExternalStore(subscribeToNothing, isMobileDevice, getIsMobileServerSnapshot);
+  // Doesn't depend on isMobile — the JSX gate below only renders the gate
+  // when `isMobile && mobileGateOpen`, so defaulting this to true (stable
+  // across server/client, unlike isMobile itself) is safe and needs no
+  // mount-effect sync.
+  const [mobileGateOpen, setMobileGateOpen] = useState(true);
 
   const [titleVisible, setTitleVisible] = useState(true);
   // Mirrors `titleVisible` for reads inside onScroll — that function lives in
@@ -1301,6 +1329,10 @@ export default function Section1() {
           ref={mountRef}
           style={{ position: 'absolute', inset: 0 }}
         />
+
+        {isMobile && mobileGateOpen && (
+          <MobileGate onDismiss={() => setMobileGateOpen(false)} />
+        )}
 
         {/* ── Scroll-timed text blocks — see app/lib/sceneConfig.ts TEXT_BLOCKS ── */}
         <ScrollTextBlocks ref={textBlockRefs} />
