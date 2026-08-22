@@ -40,6 +40,7 @@ import {
   CORRIDOR_TEXT_BLOCKS,
   CORRIDOR_TEXT_BLOCK_SEGMENTS,
   TEXT_BLOCK_DURATION_INSTANCES,
+  MOBILE_CONFIG,
 } from '@/app/lib/sceneConfig';
 import ScrollTextBlocks from '@/app/components/ScrollTextBlocks';
 import {
@@ -51,6 +52,7 @@ import {
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
 import { isMobileDevice } from '@/app/lib/mobileDetect';
 import MobileGate from '@/app/components/MobileGate';
+import { requestMotionPermissionIfNeeded } from '@/app/lib/motionPermission';
 import { AudioEngine } from '@/app/lib/audioEngine';
 import { stepContactAmount, stepFloorDopplerState, type DopplerFloorState } from '@/app/lib/audioMath';
 import { remapSubrange, corridorTravelDistance } from '@/app/lib/finalPhase';
@@ -313,6 +315,14 @@ const SPH_FRAG = /* glsl */`
    COMPONENT
 ═══════════════════════════════════════════════════════════════ */
 
+const FINGERPRINT_SVG_PATHS = [
+  'M20,82 C20,42 30,16 50,16 C70,16 80,42 80,82',
+  'M28,82 C28,47 36,26 50,26 C64,26 72,47 72,82',
+  'M36,82 C36,52 42,36 50,36 C58,36 64,52 64,82',
+  'M44,82 C44,57 47,46 50,46 C53,46 56,57 56,82',
+  'M50,82 L50,62',
+];
+
 // isMobileDevice() reads navigator/window, so it necessarily differs
 // between the server (undefined window → false) and the client (actual
 // UA/pointer checks) — the classic case useSyncExternalStore's
@@ -356,11 +366,28 @@ export default function Section1() {
   // hydration mismatch that a lazy `useState(() => isMobileDevice())`
   // initializer would cause (server: false, client: actual UA result).
   const isMobile = useSyncExternalStore(subscribeToNothing, isMobileDevice, getIsMobileServerSnapshot);
+  // Mirrors `isMobile` for reads inside the mount effect's []-dep closure
+  // (animate()'s steering code, and the deviceorientation/mousemove/touchmove
+  // handlers below). A direct closure read of `isMobile` there would be
+  // permanently stuck at false: useSyncExternalStore's hydration-safety
+  // mechanism renders once with getServerSnapshot() (false) to match SSR,
+  // then corrects to the real client value via an internal re-render — but
+  // that correction happens in a NEW render pass, after the mount effect's
+  // `[]`-dep closure has already been created (and, being `[]`-dep, is never
+  // recreated). Without this mirror, mobile devices would permanently read
+  // isMobile=false inside the mount effect, silently falling back to
+  // desktop-style mouse/touch steering. Same stale-closure concern
+  // colorsRef/audioSourceModeRef above exist to avoid.
+  const isMobileRef = useRef(isMobile);
+  useEffect(() => {
+    isMobileRef.current = isMobile;
+  }, [isMobile]);
   // Doesn't depend on isMobile — the JSX gate below only renders the gate
   // when `isMobile && mobileGateOpen`, so defaulting this to true (stable
   // across server/client, unlike isMobile itself) is safe and needs no
   // mount-effect sync.
   const [mobileGateOpen, setMobileGateOpen] = useState(true);
+  const sphereButtonElRef = useRef<HTMLButtonElement>(null);
 
   const [titleVisible, setTitleVisible] = useState(true);
   // Mirrors `titleVisible` for reads inside onScroll — that function lives in
@@ -377,6 +404,8 @@ export default function Section1() {
   const spacePromptRef = useRef<HTMLDivElement>(null);
   const scrollRef     = useRef(0);
   const mouseRef      = useRef({ x: 0, y: 0 });
+  const deviceTiltRef = useRef({ x: 0, y: 0 });
+  const sphereControlHeldRef = useRef(false);
   const textBlockRefs = useRef<HTMLDivElement[]>([]);
   const corridorTextRefs = useRef<HTMLDivElement[]>([]);
   // Locked wrap width (px) per corridor text block, set the first frame the
@@ -870,8 +899,10 @@ export default function Section1() {
           spring.vz = 0;
         }
 
-        const mx = mouseRef.current.x;
-        const my = mouseRef.current.y; // +1 = top, −1 = bottom
+        // Reads isMobileRef (not the closed-over `isMobile`) — see isMobileRef's
+        // doc comment above for why a direct closure read would be stale here.
+        const mx = isMobileRef.current ? (sphereControlHeldRef.current ? deviceTiltRef.current.x : 0) : mouseRef.current.x;
+        const my = isMobileRef.current ? (sphereControlHeldRef.current ? deviceTiltRef.current.y : 0) : mouseRef.current.y; // +1 = top, −1 = bottom
 
         const constraintFade = Math.max(0, 1 - progress / 0.25);
         const myPhase0 = my < 0 ? -my : 0;
@@ -1133,6 +1164,10 @@ export default function Section1() {
     }
 
     function onMouse(e: MouseEvent) {
+      // Gated on the REF (not the closed-over `isMobile`) — see isMobileRef's
+      // doc comment above for why: this handler's closure is fixed at mount
+      // time, but isMobileRef is corrected shortly after by a later render.
+      if (isMobileRef.current) return;
       mouseRef.current = {
         x:  (e.clientX / window.innerWidth)  * 2 - 1,
         y: -(e.clientY / window.innerHeight) * 2 + 1,
@@ -1140,10 +1175,27 @@ export default function Section1() {
     }
 
     function onTouch(e: TouchEvent) {
+      if (isMobileRef.current) return; // see onMouse's comment above
       if (!e.touches[0]) return;
       mouseRef.current = {
         x:  (e.touches[0].clientX / window.innerWidth)  * 2 - 1,
         y: -(e.touches[0].clientY / window.innerHeight) * 2 + 1,
+      };
+    }
+
+    function onDeviceOrientation(e: DeviceOrientationEvent) {
+      // beta: front-back tilt (-180..180, 0 = flat), gamma: left-right tilt
+      // (-90..90, 0 = flat). Normalize to roughly -1..1 the same way
+      // mouseRef's x/y are, so this can drive the EXACT SAME downstream
+      // spring-physics code the mouse does. Clamped, since beta can
+      // exceed the "comfortable tilt" range if the phone is held at an
+      // unusual angle — clamping avoids the sphere pinning at max
+      // deflection for any tilt beyond a modest, comfortable range.
+      const gamma = e.gamma ?? 0;
+      const beta = e.beta ?? 0;
+      deviceTiltRef.current = {
+        x: THREE.MathUtils.clamp(gamma / 30, -1, 1),
+        y: THREE.MathUtils.clamp(-(beta - 45) / 30, -1, 1), // ~45° = comfortable "neutral" hold angle
       };
     }
 
@@ -1155,9 +1207,20 @@ export default function Section1() {
       composer.setSize(w, h);
     }
 
+    // All three (mousemove/touchmove/deviceorientation) are attached
+    // unconditionally — NOT gated on `isMobile` here, because that would
+    // bake in the same closure-staleness bug isMobileRef's doc comment
+    // above describes (this registration runs once, synchronously, before
+    // isMobileRef has necessarily been corrected). Each handler instead
+    // gates its OWN effect on isMobileRef.current at call time, which is
+    // always safe since real events only arrive well after mount. This is
+    // harmless cross-registration in practice: desktop browsers essentially
+    // never fire deviceorientation, and mobile's onMouse/onTouch handlers
+    // no-op via their own isMobileRef guard.
     window.addEventListener('scroll',     onScroll, { passive: true });
     window.addEventListener('mousemove',  onMouse);
     window.addEventListener('touchmove',  onTouch, { passive: true });
+    window.addEventListener('deviceorientation', onDeviceOrientation);
     window.addEventListener('resize',     onResize);
 
     return () => {
@@ -1165,6 +1228,7 @@ export default function Section1() {
       window.removeEventListener('scroll',    onScroll);
       window.removeEventListener('mousemove', onMouse);
       window.removeEventListener('touchmove', onTouch);
+      window.removeEventListener('deviceorientation', onDeviceOrientation);
       window.removeEventListener('resize',    onResize);
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
       renderer.dispose();
@@ -1298,6 +1362,14 @@ export default function Section1() {
     audioEngineRef.current?.setPlaying(isPlaying);
   }, [isPlaying]);
 
+  function handleSphereControlPress() {
+    sphereControlHeldRef.current = true;
+    requestMotionPermissionIfNeeded();
+  }
+  function handleSphereControlRelease() {
+    sphereControlHeldRef.current = false;
+  }
+
   /* Scroll runway size — enough for the intro, all 5 text blocks, and the
    * final zoom/corridor phase, plus a 1-instance settle buffer at the end. */
   const TOTAL_SCROLL_INSTANCES =
@@ -1332,6 +1404,51 @@ export default function Section1() {
 
         {isMobile && mobileGateOpen && (
           <MobileGate onDismiss={() => setMobileGateOpen(false)} />
+        )}
+
+        {isMobile && !mobileGateOpen && (
+          <button
+            ref={sphereButtonElRef}
+            aria-label={MOBILE_CONFIG.sphereButton.ariaLabel}
+            onPointerDown={handleSphereControlPress}
+            onPointerUp={handleSphereControlRelease}
+            onPointerCancel={handleSphereControlRelease}
+            onPointerLeave={handleSphereControlRelease}
+            style={{
+              position: 'absolute',
+              zIndex: 30,
+              width: MOBILE_CONFIG.sphereButton.sizePx,
+              height: MOBILE_CONFIG.sphereButton.sizePx,
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              touchAction: 'none',
+              left: '50%',
+              bottom: `${MOBILE_CONFIG.sphereButton.portraitBottomPercent}%`,
+              transform: 'translateX(-50%)',
+            }}
+            className="sphereControlBtn"
+          >
+            <svg viewBox="0 0 100 100" width="100%" height="100%" style={{ filter: 'drop-shadow(1.5px 1.5px 0 rgba(0,0,0,0.85))' }}>
+              {FINGERPRINT_SVG_PATHS.map((d, i) => (
+                <path key={i} d={d} stroke="#ffffff" strokeWidth={5} strokeLinecap="round" fill="none" />
+              ))}
+            </svg>
+          </button>
+        )}
+
+        {isMobile && !mobileGateOpen && (
+          <style>{`
+            @media (orientation: landscape) {
+              .sphereControlBtn {
+                left: auto !important;
+                bottom: 50% !important;
+                right: ${MOBILE_CONFIG.sphereButton.landscapeRightPercent}% !important;
+                transform: translateY(50%) !important;
+              }
+            }
+          `}</style>
         )}
 
         {/* ── Scroll-timed text blocks — see app/lib/sceneConfig.ts TEXT_BLOCKS ── */}
