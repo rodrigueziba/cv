@@ -16,12 +16,12 @@ import { requestMotionPermissionIfNeeded } from '@/app/lib/motionPermission';
 export default function MobileGate({ onDismiss }: { onDismiss: () => void }) {
   const { setAudioSourceMode, setAudioActivated, setIsPlaying } = useSceneControls();
 
-  async function handleStart() {
-    await requestMotionPermissionIfNeeded();
+  function handleStart() {
     setAudioSourceMode('file');
     setAudioActivated(true);
     setIsPlaying(true);
     onDismiss();
+    void requestMotionPermissionIfNeeded();
   }
 
   const michroma = 'var(--font-michroma), sans-serif';

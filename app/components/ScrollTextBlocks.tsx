@@ -88,14 +88,16 @@ const ScrollTextBlocks = forwardRef<HTMLDivElement[], object>(function ScrollTex
           assumes (100 - topMarginPercent*2) — otherwise the safe-zone box
           would keep a large, unnecessary bottom gap in landscape even
           though the sphere-control button has moved to the side. */}
-      <style>{`
-        @media (orientation: landscape) {
-          .textSafeZone {
-            right: ${landscapeRightPercent + gapAroundButtonPercent}% !important;
-            bottom: ${topMarginPercent}% !important;
+      {isMobile && (
+        <style>{`
+          @media (orientation: landscape) {
+            .textSafeZone {
+              right: ${landscapeRightPercent + gapAroundButtonPercent}% !important;
+              bottom: ${topMarginPercent}% !important;
+            }
           }
-        }
-      `}</style>
+        `}</style>
+      )}
       {TEXT_BLOCKS.map((block, i) => {
         const totalScale = textBlockFontSizeMultiplier * (isMobile ? mobileFitScale[i] : 1);
         const textStyle = {

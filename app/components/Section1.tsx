@@ -51,6 +51,7 @@ import {
 } from '@/app/lib/scrollTimeline';
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
 import { useIsMobile } from '@/app/lib/mobileDetect';
+import { remapDeviceTiltToScreenAxes } from '@/app/lib/deviceTilt';
 import MobileGate from '@/app/components/MobileGate';
 import { requestMotionPermissionIfNeeded } from '@/app/lib/motionPermission';
 import { AudioEngine } from '@/app/lib/audioEngine';
@@ -856,7 +857,14 @@ export default function Section1() {
           titleRef.current.style.animation = insideCorridorPhase ? 'none' : (titleVisibleRef.current ? '' : 'none');
         }
         if (spacePromptRef.current) {
-          spacePromptRef.current.style.opacity = insideCorridorPhase ? '0' : (audioActivatedRef.current ? '0' : '');
+          // "Press Space" is a desktop-only hint (phones have no physical
+          // Space key) — mobile already has its own separate audio-
+          // activation flow (the gate overlay), so force-hide regardless
+          // of audioActivatedRef. Reads isMobileRef (not the closed-over
+          // `isMobile`) — see isMobileRef's doc comment above for why a
+          // direct closure read would be stale here.
+          spacePromptRef.current.style.opacity =
+            insideCorridorPhase || isMobileRef.current ? '0' : (audioActivatedRef.current ? '0' : '');
         }
       }
 
@@ -1171,17 +1179,22 @@ export default function Section1() {
 
     function onDeviceOrientation(e: DeviceOrientationEvent) {
       // beta: front-back tilt (-180..180, 0 = flat), gamma: left-right tilt
-      // (-90..90, 0 = flat). Normalize to roughly -1..1 the same way
-      // mouseRef's x/y are, so this can drive the EXACT SAME downstream
-      // spring-physics code the mouse does. Clamped, since beta can
-      // exceed the "comfortable tilt" range if the phone is held at an
-      // unusual angle — clamping avoids the sphere pinning at max
-      // deflection for any tilt beyond a modest, comfortable range.
-      const gamma = e.gamma ?? 0;
-      const beta = e.beta ?? 0;
+      // (-90..90, 0 = flat) — both relative to the DEVICE's own physical
+      // axes, not the screen's. Remap to SCREEN-relative axes first (see
+      // remapDeviceTiltToScreenAxes) so landscape rotation doesn't steer
+      // ~90° off from what's actually on screen, THEN normalize to
+      // roughly -1..1 the same way mouseRef's x/y are, so this can drive
+      // the EXACT SAME downstream spring-physics code the mouse does.
+      // Clamped, since the remapped angle can exceed the "comfortable
+      // tilt" range if the phone is held at an unusual angle — clamping
+      // avoids the sphere pinning at max deflection for any tilt beyond a
+      // modest, comfortable range.
+      const screenAngle =
+        screen.orientation?.angle ?? (window as unknown as { orientation?: number }).orientation ?? 0;
+      const { x: sx, y: sy } = remapDeviceTiltToScreenAxes(e.beta ?? 0, e.gamma ?? 0, screenAngle);
       deviceTiltRef.current = {
-        x: THREE.MathUtils.clamp(gamma / 30, -1, 1),
-        y: THREE.MathUtils.clamp(-(beta - 45) / 30, -1, 1), // ~45° = comfortable "neutral" hold angle
+        x: THREE.MathUtils.clamp(sx / 30, -1, 1),
+        y: THREE.MathUtils.clamp(-(sy - 45) / 30, -1, 1), // ~45° = comfortable "neutral" hold angle
       };
     }
 
@@ -1545,7 +1558,7 @@ export default function Section1() {
           ref={titleRef}
           style={{
             position:      'absolute',
-            top:           TITLE_CONFIG.topPosition,
+            top:           isMobile ? '23%' : TITLE_CONFIG.topPosition,
             left:          '50%',
             transform:     'translateX(-50%)',
             zIndex:        10,
@@ -1614,7 +1627,7 @@ export default function Section1() {
             textAlign:     'center',
             userSelect:    'none',
             pointerEvents: 'none',
-            opacity:       audioActivated ? 0 : undefined,
+            opacity:       (isMobile || audioActivated) ? 0 : undefined,
             transition:    'opacity 0.4s ease',
             whiteSpace:    'nowrap',
             padding:       '0 16px',
