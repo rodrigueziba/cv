@@ -1360,8 +1360,26 @@ export default function Section1() {
       // tilt" range if the phone is held at an unusual angle — clamping
       // avoids the sphere pinning at max deflection for any tilt beyond a
       // modest, comfortable range.
-      const screenAngle =
-        screen.orientation?.angle ?? (window as unknown as { orientation?: number }).orientation ?? 0;
+      // screen.orientation.angle / the legacy window.orientation are
+      // unreliable across mobile browsers (window.orientation is removed
+      // on some modern engines entirely; angle-degree conventions aren't
+      // fully consistent either) — screen.orientation.type is a string
+      // enum ('portrait-primary' | 'portrait-secondary' |
+      // 'landscape-primary' | 'landscape-secondary') that's more
+      // consistently implemented. Falls back to matchMedia's boolean
+      // portrait/landscape check (which IS universally reliable) if
+      // screen.orientation itself is unavailable — in that fallback case
+      // rotation DIRECTION can't be determined, so portrait's mapping
+      // (angle 0) is used as a safe default; this is a known, documented
+      // residual limitation on that specific fallback path, not
+      // something this fix claims to fully solve.
+      const orientationType = screen.orientation?.type;
+      let screenAngle = 0;
+      if (orientationType === 'landscape-primary') screenAngle = 90;
+      else if (orientationType === 'landscape-secondary') screenAngle = -90;
+      else if (!orientationType && window.matchMedia('(orientation: landscape)').matches) {
+        screenAngle = 90; // direction unknown — best-effort guess, see comment above
+      }
       const { x: sx, y: sy } = remapDeviceTiltToScreenAxes(e.beta ?? 0, e.gamma ?? 0, screenAngle);
       deviceTiltRef.current = {
         x: THREE.MathUtils.clamp(sx / 30, -1, 1),
