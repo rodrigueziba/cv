@@ -923,6 +923,24 @@ export default function Section1() {
       let corridorTravelT = 0;
 
       if (!insideCorridorPhase) {
+        // Discontinuous-jump safety net: the corridor branch's own revert
+        // (below) only fires on a frame that samples corridorTravelT < 0.5
+        // while still inside the corridor phase. A single-frame scroll delta
+        // (fast scroll-up, scrollbar drag) can jump straight from "past
+        // halfway, override active" to fully outside the corridor phase,
+        // skipping that sample entirely and leaving the override stuck on.
+        // Catch that here too, symmetric to the corridor branch's revert.
+        if (corridorAudioOverrideActiveRef.current) {
+          corridorAudioOverrideActiveRef.current = false;
+          const snap = corridorAudioSnapshotRef.current;
+          if (snap) {
+            setAudioSourceMode(snap.mode);
+            if (snap.mode === 'file') setCurrentTrackIndex(snap.trackIndex);
+            else if (snap.mode === 'tone') setToneFrequencyHz(snap.toneFrequencyHz);
+            else setArpeggioMode(snap.arpeggioMode);
+          }
+        }
+
         /* ── Original disc/mouse-spring control (unchanged) ── */
         if (wasInsideCorridorRef.current) {
           // Hard teleport back from the corridor — there's no spatial
@@ -1428,6 +1446,10 @@ export default function Section1() {
   useEffect(() => {
     if (audioSourceModeRef.current !== 'file') return;
     audioEngineRef.current?.setSource('file', resolveFileSourceOpts());
+    // resolveFileSourceOpts reads currentTrackIndex only on the uploadedFileUrl-truthy
+    // branch (gated above), where currentTrackIndex is irrelevant — the upload always
+    // wins. Omitting it avoids reloading the file source on every playlist track change
+    // while an upload is active.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadedFileUrl]);
 
