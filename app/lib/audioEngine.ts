@@ -259,11 +259,15 @@ export class AudioEngine {
    * `masterGain` (works uniformly for oscillators, which have no native
    * pause) and additionally pauses/resumes the `<audio>` element in
    * 'file' mode (saves CPU/bandwidth rather than just muting it).
+   *
+   * `gainMultiplier` scales DEFAULT_MASTER_GAIN (e.g. AUDIO_CONFIG's
+   * mobileMasterGainMultiplier) — defaults to 1 (no change) so existing
+   * callers that don't pass it behave exactly as before.
    */
-  setPlaying(playing: boolean): void {
+  setPlaying(playing: boolean, gainMultiplier: number = 1): void {
     this.playing = playing;
     const { ctx } = this.ensureGraph();
-    this.masterGain?.gain.setTargetAtTime(playing ? DEFAULT_MASTER_GAIN : 0, ctx.currentTime, 0.12);
+    this.masterGain?.gain.setTargetAtTime(playing ? DEFAULT_MASTER_GAIN * gainMultiplier : 0, ctx.currentTime, 0.12);
     if (this.audioEl) {
       // Same "don't play() before the context is confirmed running" guard
       // as setSource() above — see its comment. pause() is always safe to

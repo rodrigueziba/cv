@@ -323,14 +323,6 @@ const SPH_FRAG = /* glsl */`
  * never set by the UI. */
 const CORRIDOR_AUDIO_OVERRIDE_TRACK_INDEX = -1;
 
-const FINGERPRINT_SVG_PATHS = [
-  'M22,90 C22,45 32,12 50,12 C68,12 78,45 78,90',
-  'M30,90 C30,50 38,22 50,22 C62,22 70,50 70,90',
-  'M38,90 C38,55 44,32 50,32 C56,32 62,55 62,90',
-  'M46,90 C46,60 48,42 50,42 C52,42 54,60 54,90',
-  'M50,90 L50,70',
-];
-
 /** navigator.vibrate is Android-only — iOS Safari has no implementation
  * and silently does nothing when called, which is the desired graceful
  * degradation (no feature-detection branch needed beyond the existence
@@ -1625,13 +1617,26 @@ export default function Section1() {
   }, [pitchInertiaMultiplier]);
 
   useEffect(() => {
-    audioEngineRef.current?.setPlaying(isPlaying);
-  }, [isPlaying]);
+    audioEngineRef.current?.setPlaying(isPlaying, isMobile ? AUDIO_CONFIG.mobileMasterGainMultiplier : 1);
+  }, [isPlaying, isMobile]);
 
+  /* Mobile: the sphere-control button (not the permission gate) is what
+   * activates audio, on its first press. Every subsequent press just makes
+   * sure playback is actually running — if it's already playing, this is a
+   * no-op; if it somehow got paused (any reason), this resumes it. This
+   * button must NEVER pause audio itself. */
   function handleSphereControlPress() {
     vibrateLightly();
     sphereControlHeldRef.current = true;
     requestMotionPermissionIfNeeded();
+    if (!isPlayingRef.current) {
+      if (!audioActivatedRef.current) {
+        setAudioSourceMode('file');
+        setAudioActivated(true);
+        setCurrentTrackIndex(AUDIO_CONFIG.mobileDefaultTrackIndex);
+      }
+      setIsPlaying(true);
+    }
   }
   function handleSphereControlRelease() {
     vibrateLightly();
@@ -1698,11 +1703,24 @@ export default function Section1() {
             }}
             className="sphereControlBtn"
           >
-            <svg viewBox="0 0 100 100" width="100%" height="100%" style={{ filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.9)) drop-shadow(1.5px 1.5px 0 rgba(0,0,0,0.85))' }}>
-              {FINGERPRINT_SVG_PATHS.map((d, i) => (
-                <path key={i} d={d} stroke="#ffffff" strokeWidth={5} strokeLinecap="round" fill="none" />
-              ))}
-            </svg>
+            {/* eslint-disable-next-line @next/next/no-img-element -- fixed-size icon inside a raw
+                Three.js overlay button, not a content image; next/image's responsive-loader
+                machinery isn't a fit here. */}
+            <img
+              src={withBasePath('/icon.png')}
+              alt=""
+              draggable={false}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain', // icon.png is square, but this guards against any mismatch
+                filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.9)) drop-shadow(1.5px 1.5px 0 rgba(0,0,0,0.85))',
+              }}
+              onError={(e) => {
+                // Missing/failed icon degrades to invisible rather than a broken-image glyph.
+                e.currentTarget.style.display = 'none';
+              }}
+            />
           </button>
         )}
 

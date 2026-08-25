@@ -247,6 +247,9 @@ export const AUDIO_CONFIG = {
    * see CORRIDOR_AUDIO_OVERRIDE_TRACK_INDEX in Section1.tsx for the
    * sentinel index that selects this path. */
   corridorOverridePath: '/audio4.mp3',
+  /** Mobile plays 20% louder than the base master gain (AudioEngine's
+   * DEFAULT_MASTER_GAIN) — passed as a multiplier to setPlaying(). */
+  mobileMasterGainMultiplier: 1.2,
   defaultToneFrequencyHz: 220,
   toneFrequencyRangeHz: { min: 55, max: 1760 },
 

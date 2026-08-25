@@ -1,26 +1,22 @@
 'use client';
 
-import { useSceneControls } from '@/app/lib/SceneControlsContext';
-import { MOBILE_CONFIG, AUDIO_CONFIG } from '@/app/lib/sceneConfig';
+import { MOBILE_CONFIG } from '@/app/lib/sceneConfig';
 import { requestMotionPermissionIfNeeded } from '@/app/lib/motionPermission';
 
 /**
  * Mobile-only permission/start gate. Rendered by Section1.tsx only when
  * isMobileDevice() is true and the user hasn't dismissed it yet (either
  * button closes it — see Section1.tsx's mobileGateOpen state). Requests
- * device-motion permission and activates audio on the CTA tap; the close
- * button dismisses without activating either (both are retryable later —
- * see requestMotionPermissionIfNeeded and the debug menu's play/pause
- * control).
+ * device-motion permission on the CTA tap; audio is NOT activated here —
+ * the sphere-control button's first press activates it instead (see
+ * Section1.tsx's handleSphereControlPress), so a user who dismisses this
+ * gate without ever pressing the sphere button never hears audio. The
+ * close button dismisses without requesting permission (retryable later —
+ * the sphere button also calls requestMotionPermissionIfNeeded on every
+ * press, and the debug menu still has manual play/pause).
  */
 export default function MobileGate({ onDismiss }: { onDismiss: () => void }) {
-  const { setAudioSourceMode, setAudioActivated, setIsPlaying, setCurrentTrackIndex } = useSceneControls();
-
   function handleStart() {
-    setAudioSourceMode('file');
-    setAudioActivated(true);
-    setIsPlaying(true);
-    setCurrentTrackIndex(AUDIO_CONFIG.mobileDefaultTrackIndex);
     onDismiss();
     void requestMotionPermissionIfNeeded();
   }
