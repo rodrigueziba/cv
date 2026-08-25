@@ -398,7 +398,7 @@ export const FREE_CAMERA_CONFIG = {
  * for where each value is consumed. */
 export const MOBILE_CONFIG = {
   gateOverlay: {
-    ctaText: 'HABILITAR PERMISOS Y SONIDO E INICIAR LA EXPERIENCIA',
+    ctaText: 'HABILITAR PERMISOS E INICIAR LA EXPERIENCIA',
     closeAriaLabel: 'Cerrar',
   },
   sphereButton: {
@@ -406,7 +406,7 @@ export const MOBILE_CONFIG = {
     portraitBottomPercent: 20,
     /** Landscape: centered vertically, this % in from the right edge. */
     landscapeRightPercent: 20,
-    sizePx: 64,
+    sizePx: 80, // 64 * 1.25 — icon.png renders at width:100%/height:100% of this, objectFit:'contain' keeps it undistorted
     ariaLabel: 'Mantené presionado para mover la esfera inclinando el teléfono',
   },
   textSafeArea: {

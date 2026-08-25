@@ -1687,6 +1687,7 @@ export default function Section1() {
             onPointerUp={handleSphereControlRelease}
             onPointerCancel={handleSphereControlRelease}
             onPointerLeave={handleSphereControlRelease}
+            onContextMenu={(e) => e.preventDefault()}
             style={{
               position: 'absolute',
               zIndex: 30,
@@ -1700,6 +1701,9 @@ export default function Section1() {
               left: '50%',
               bottom: `${MOBILE_CONFIG.sphereButton.portraitBottomPercent}%`,
               transform: 'translateX(-50%)',
+              WebkitTouchCallout: 'none', // long-press on iOS Safari would otherwise offer to save/copy the icon image
+              WebkitUserSelect: 'none',
+              userSelect: 'none',
             }}
             className="sphereControlBtn"
           >
@@ -1715,6 +1719,16 @@ export default function Section1() {
                 height: '100%',
                 objectFit: 'contain', // icon.png is square, but this guards against any mismatch
                 filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.9)) drop-shadow(1.5px 1.5px 0 rgba(0,0,0,0.85))',
+                // pointerEvents:none routes every touch straight to the parent
+                // <button> — the <img> itself never becomes a touch target, which
+                // is what triggers mobile browsers' long-press "save/copy image"
+                // menu in the first place. The WebkitTouchCallout/userSelect
+                // properties above are a second layer in case a browser still
+                // treats the long-press as targeting this element regardless.
+                pointerEvents: 'none',
+                WebkitTouchCallout: 'none',
+                WebkitUserSelect: 'none',
+                userSelect: 'none',
               }}
               onError={(e) => {
                 // Missing/failed icon degrades to invisible rather than a broken-image glyph.
