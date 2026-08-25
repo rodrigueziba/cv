@@ -822,6 +822,16 @@ export default function Section1() {
       const diameter = SPHERE_R * 2;
       const behindOffset = corridor.axis.clone().multiplyScalar(-diameter * CORRIDOR_CONFIG.chaseDistanceMultiplier);
       const camPos = spherePos.clone().add(behindOffset).add(new THREE.Vector3(0, diameter * CORRIDOR_CONFIG.chaseHeightMultiplier, 0));
+      // Never let the chase camera sit further "behind" than the tunnel's
+      // own entrance plane — the unclamped chase offset briefly puts it
+      // OUTSIDE the tunnel mouth during the first moments of the corridor
+      // phase (while the sphere is still near the entrance), which is
+      // exactly the exterior framing this clamp exists to prevent. Once
+      // the sphere has traveled further in than the chase distance, this
+      // clamp has no effect and the normal, already-tuned chase framing
+      // takes over unchanged. corridor.axis is (0,0,-1), so "inside the
+      // tunnel" means camera.z <= corridor.entrance.z.
+      camPos.z = Math.min(camPos.z, corridor.entrance.z);
       camera.position.copy(camPos);
       camera.up.copy(CORRIDOR_UP);
       // Look AHEAD along the travel axis and at a height blended between the
