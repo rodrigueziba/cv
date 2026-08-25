@@ -250,6 +250,16 @@ export const AUDIO_CONFIG = {
   /** Mobile plays 20% louder than the base master gain (AudioEngine's
    * DEFAULT_MASTER_GAIN) — passed as a multiplier to setPlaying(). */
   mobileMasterGainMultiplier: 1.2,
+  /** iOS Safari has a long-standing WebKit bug: HTMLMediaElement.playbackRate
+   * changes don't audibly affect output once the element is routed through
+   * createMediaElementSource (the doppler pitch effect silently does
+   * nothing), and file-source playback has also been unreliable to start on
+   * first activation there. Pure-tone mode uses an OscillatorNode instead —
+   * a native Web Audio node with no HTMLMediaElement bridging, so it isn't
+   * subject to either issue — so iOS mobile sessions start in tone mode at
+   * this frequency instead of the file playlist. See Section1.tsx's
+   * handleSphereControlPress. */
+  iosDefaultToneFrequencyHz: 115,
   defaultToneFrequencyHz: 220,
   toneFrequencyRangeHz: { min: 55, max: 1760 },
 

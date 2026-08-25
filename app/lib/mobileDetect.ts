@@ -1,6 +1,18 @@
 import { useSyncExternalStore } from 'react';
 
 /**
+ * True for iOS specifically (iPhone/iPad/iPod, or iPadOS's Mac-UA
+ * disguise — detected via multi-touch on a "Macintosh" UA, since real
+ * Macs report maxTouchPoints 0). Doesn't check for mobile/touch-primary
+ * on its own — see isMobileDevice(), which layers that check on top.
+ */
+export function isIOSDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /iPhone|iPad|iPod/i.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
+}
+
+/**
  * True for iOS/Android mobile browsers, false for desktop (including
  * touchscreen laptops/desktops, which have a fine pointer available
  * even if they also support touch). Computed once per session — device
@@ -10,7 +22,7 @@ import { useSyncExternalStore } from 'react';
 export function isMobileDevice(): boolean {
   if (typeof navigator === 'undefined' || typeof window === 'undefined') return false;
   const ua = navigator.userAgent || '';
-  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
+  const isIOS = isIOSDevice();
   const isAndroid = /Android/i.test(ua);
   if (!isIOS && !isAndroid) return false;
   // Coarse-pointer + no-hover is what actually distinguishes a touch-only
@@ -51,4 +63,14 @@ function getIsMobileServerSnapshot() {
  */
 export function useIsMobile(): boolean {
   return useSyncExternalStore(subscribeToNothing, isMobileDevice, getIsMobileServerSnapshot);
+}
+
+function getIsIOSServerSnapshot() {
+  return false;
+}
+
+/** Hydration-safe hook for "is this iOS specifically" — same rationale as
+ * useIsMobile() above. */
+export function useIsIOS(): boolean {
+  return useSyncExternalStore(subscribeToNothing, isIOSDevice, getIsIOSServerSnapshot);
 }

@@ -50,7 +50,7 @@ import {
   corridorInstanceFromTravel,
 } from '@/app/lib/scrollTimeline';
 import { useSceneControls, type AudioSourceMode, type ArpeggioMode } from '@/app/lib/SceneControlsContext';
-import { useIsMobile } from '@/app/lib/mobileDetect';
+import { useIsMobile, useIsIOS } from '@/app/lib/mobileDetect';
 import { remapDeviceTiltToScreenAxes } from '@/app/lib/deviceTilt';
 import MobileGate from '@/app/components/MobileGate';
 import { requestMotionPermissionIfNeeded } from '@/app/lib/motionPermission';
@@ -365,6 +365,7 @@ export default function Section1() {
   // hydration mismatch that a lazy `useState(() => isMobileDevice())`
   // initializer would cause (server: false, client: actual UA result).
   const isMobile = useIsMobile();
+  const isIOS = useIsIOS();
   // Mirrors `isMobile` for reads inside the mount effect's []-dep closure
   // (animate()'s steering code, and the deviceorientation/mousemove/touchmove
   // handlers below). A direct closure read of `isMobile` there would be
@@ -1624,16 +1625,27 @@ export default function Section1() {
    * activates audio, on its first press. Every subsequent press just makes
    * sure playback is actually running — if it's already playing, this is a
    * no-op; if it somehow got paused (any reason), this resumes it. This
-   * button must NEVER pause audio itself. */
+   * button must NEVER pause audio itself.
+   *
+   * iOS specifically starts in tone mode instead of the file playlist —
+   * see AUDIO_CONFIG.iosDefaultToneFrequencyHz's doc comment for why
+   * (a WebKit bug means playbackRate-driven pitch shifting silently does
+   * nothing on a file source there, and file playback has also been
+   * unreliable to start at all on first activation). */
   function handleSphereControlPress() {
     vibrateLightly();
     sphereControlHeldRef.current = true;
     requestMotionPermissionIfNeeded();
     if (!isPlayingRef.current) {
       if (!audioActivatedRef.current) {
-        setAudioSourceMode('file');
+        if (isIOS) {
+          setAudioSourceMode('tone');
+          setToneFrequencyHz(AUDIO_CONFIG.iosDefaultToneFrequencyHz);
+        } else {
+          setAudioSourceMode('file');
+          setCurrentTrackIndex(AUDIO_CONFIG.mobileDefaultTrackIndex);
+        }
         setAudioActivated(true);
-        setCurrentTrackIndex(AUDIO_CONFIG.mobileDefaultTrackIndex);
       }
       setIsPlaying(true);
     }
