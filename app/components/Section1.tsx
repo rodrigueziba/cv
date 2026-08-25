@@ -428,6 +428,7 @@ export default function Section1() {
   const mountRef      = useRef<HTMLDivElement>(null);
   const indicatorRef  = useRef<HTMLDivElement>(null);
   const indicatorClickRevealUntilRef = useRef(0); // clock.getElapsedTime() timestamp, 0 = no active reveal
+  const indicatorClickPendingRef = useRef(false); // set by onClick (outside animate()'s clock reads), consumed on the next animate() frame
   const titleRef      = useRef<HTMLDivElement>(null);
   const spacePromptRef = useRef<HTMLDivElement>(null);
   const scrollRef     = useRef(0);
@@ -449,6 +450,12 @@ export default function Section1() {
   useEffect(() => {
     audioSourceModeRef.current = audioSourceMode;
   }, [audioSourceMode]);
+  // Tracks audioSourceMode as of the last run of the [audioSourceMode,
+  // currentTrackIndex] file-source-rebuild effect below, so that effect can
+  // tell "audioSourceMode itself changed" apart from "only currentTrackIndex
+  // changed" from inside its own body (needed to skip a redundant/destructive
+  // reload while a custom upload is active — see that effect's comment).
+  const prevAudioSourceModeForFileEffectRef = useRef(audioSourceMode);
 
   // Read by a later task's rAF-loop code (corridor construction) that needs the
   // CURRENT colors without the stale-closure problem `animate()`'s single
@@ -926,6 +933,16 @@ export default function Section1() {
       const time     = clock.getElapsedTime();
       const progress = scrollRef.current;
 
+      // Consume any click-triggered indicator reveal here, using this frame's
+      // already-computed `time` rather than reading the clock again — onClick
+      // runs outside animate()'s per-frame cadence and must not touch the
+      // Clock itself (getElapsedTime()/getDelta() share internal state, so an
+      // off-frame clock read would corrupt the next frame's dt).
+      if (indicatorClickPendingRef.current) {
+        indicatorClickPendingRef.current = false;
+        indicatorClickRevealUntilRef.current = time + 3;
+      }
+
       /* Update uniforms */
       flowUniforms.uTime.value     = time;
       flowUniforms.uProgress.value = progress;
@@ -983,6 +1000,25 @@ export default function Section1() {
       let sphereSpeed: number;
       let corridorTravelT = 0;
 
+      // Reverts the corridor's 50%-crossing audio override back to whatever
+      // mode/track/frequency/key snapshot was active right before it engaged.
+      // currentTrackIndex is always restored (not just on the 'file' branch)
+      // because the engage side always stamps it to the CORRIDOR_AUDIO_OVERRIDE_
+      // TRACK_INDEX sentinel regardless of prior mode — leaving it unrestored
+      // when reverting from tone/arpeggio would strand it at the sentinel, so a
+      // later manual switch back to 'file' mode would wrongly resolve to the
+      // override track instead of the real track that was active before.
+      function revertCorridorAudioOverride() {
+        corridorAudioOverrideActiveRef.current = false;
+        const snap = corridorAudioSnapshotRef.current;
+        if (snap) {
+          setAudioSourceMode(snap.mode);
+          setCurrentTrackIndex(snap.trackIndex);
+          if (snap.mode === 'tone') setToneFrequencyHz(snap.toneFrequencyHz);
+          else if (snap.mode === 'arpeggio') setArpeggioMode(snap.arpeggioMode);
+        }
+      }
+
       if (!insideCorridorPhase) {
         // Discontinuous-jump safety net: the corridor branch's own revert
         // (below) only fires on a frame that samples corridorTravelT < 0.5
@@ -992,14 +1028,7 @@ export default function Section1() {
         // skipping that sample entirely and leaving the override stuck on.
         // Catch that here too, symmetric to the corridor branch's revert.
         if (corridorAudioOverrideActiveRef.current) {
-          corridorAudioOverrideActiveRef.current = false;
-          const snap = corridorAudioSnapshotRef.current;
-          if (snap) {
-            setAudioSourceMode(snap.mode);
-            if (snap.mode === 'file') setCurrentTrackIndex(snap.trackIndex);
-            else if (snap.mode === 'tone') setToneFrequencyHz(snap.toneFrequencyHz);
-            else setArpeggioMode(snap.arpeggioMode);
-          }
+          revertCorridorAudioOverride();
         }
 
         /* ── Original disc/mouse-spring control (unchanged) ── */
@@ -1083,14 +1112,7 @@ export default function Section1() {
           setAudioSourceMode('file');
           setCurrentTrackIndex(CORRIDOR_AUDIO_OVERRIDE_TRACK_INDEX);
         } else if (!pastHalfway && corridorAudioOverrideActiveRef.current) {
-          corridorAudioOverrideActiveRef.current = false;
-          const snap = corridorAudioSnapshotRef.current;
-          if (snap) {
-            setAudioSourceMode(snap.mode);
-            if (snap.mode === 'file') setCurrentTrackIndex(snap.trackIndex);
-            else if (snap.mode === 'tone') setToneFrequencyHz(snap.toneFrequencyHz);
-            else setArpeggioMode(snap.arpeggioMode);
-          }
+          revertCorridorAudioOverride();
         }
       }
 
@@ -1389,7 +1411,12 @@ export default function Section1() {
 
     function onClick() {
       if (isMobileRef.current) return;
-      indicatorClickRevealUntilRef.current = clock.getElapsedTime() + 3;
+      // Don't touch the Clock here — this handler fires at an arbitrary
+      // moment outside animate()'s per-frame cadence, and any Clock read
+      // (getElapsedTime()/getDelta()) would corrupt the dt the very next
+      // animate() frame computes. Just flag it; animate() converts the flag
+      // into a timestamp using its own already-computed per-frame `time`.
+      indicatorClickPendingRef.current = true;
     }
 
     function onResize() {
@@ -1537,8 +1564,29 @@ export default function Section1() {
    * down and recreates the oscillator/audio element), audible click is
    * expected here. Also reacts to currentTrackIndex, since switching tracks
    * while already in file mode (debug-menu skip, playlist auto-advance, or
-   * the corridor override engaging/reverting) must reload the source too. */
+   * the corridor override engaging/reverting) must reload the source too.
+   *
+   * Skip the reload when ONLY currentTrackIndex changed (audioSourceMode
+   * itself is unchanged) while a custom upload is active: resolveFileSourceOpts()
+   * always prefers uploadedFileUrl regardless of currentTrackIndex, so the
+   * resolved source can't actually have changed (e.g. the corridor override
+   * engaging/reverting toggles currentTrackIndex to/from the sentinel while
+   * mode stays 'file'). Without this guard, setSource() would tear down and
+   * recreate the <audio> element — restarting the user's uploaded track from
+   * 0 with an audible click — every time the sphere crosses the corridor's
+   * 50% mark, even though the source URL never changed.
+   *
+   * This must NOT skip on an actual audioSourceMode change (e.g. switching
+   * back to 'file' from 'tone'/'arpeggio' with an upload still loaded from
+   * earlier) — uploadedFileUrl persists across mode switches, but the engine
+   * still needs setSource() to tear down the oscillator and load the file.
+   * prevAudioSourceModeForFileEffectRef tracks the mode as of the last run so
+   * the two cases (mode changed vs. only currentTrackIndex changed) can be
+   * told apart from inside the effect body. */
   useEffect(() => {
+    const modeChanged = prevAudioSourceModeForFileEffectRef.current !== audioSourceMode;
+    prevAudioSourceModeForFileEffectRef.current = audioSourceMode;
+    if (!modeChanged && uploadedFileUrl) return;
     audioEngineRef.current?.setSource(audioSourceMode, {
       ...resolveFileSourceOpts(),
       toneFrequencyHz,
