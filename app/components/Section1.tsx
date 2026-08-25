@@ -398,6 +398,7 @@ export default function Section1() {
   const containerRef  = useRef<HTMLDivElement>(null);
   const mountRef      = useRef<HTMLDivElement>(null);
   const indicatorRef  = useRef<HTMLDivElement>(null);
+  const indicatorClickRevealUntilRef = useRef(0); // clock.getElapsedTime() timestamp, 0 = no active reveal
   const titleRef      = useRef<HTMLDivElement>(null);
   const spacePromptRef = useRef<HTMLDivElement>(null);
   const scrollRef     = useRef(0);
@@ -1202,11 +1203,28 @@ export default function Section1() {
       /* Bloom reacts to progress: subtle at start, punchy at Phase 3 */
       bloom.strength = 0.12 + progress * 0.30;
 
-      /* Fade scroll indicator */
+      /* Fade scroll indicator — the normal scroll-progress-driven fade,
+       * PLUS (PC only) a temporary full-opacity reveal for 3s after any
+       * click, with its own smooth fade-out once that window ends. The
+       * two are blended via max() so whichever wants the indicator MORE
+       * visible right now wins — clicking during the normal fade-out
+       * pops it back to full opacity, and once the 3s window itself
+       * ends, control silently reverts to the normal scroll-driven value
+       * (which may itself already be low/zero by then). */
       if (indicatorRef.current) {
-        indicatorRef.current.style.opacity = String(
-          Math.max(0, 1 - progress * 12)
-        );
+        const scrollFade = Math.max(0, 1 - progress * 12);
+        let clickFade = 0;
+        if (!isMobileRef.current && indicatorClickRevealUntilRef.current > 0) {
+          const remaining = indicatorClickRevealUntilRef.current - time;
+          if (remaining > 0) {
+            // Full opacity for the first 2s of the 3s window, then a
+            // 1s smooth fade-out to close it.
+            clickFade = remaining > 1 ? 1 : remaining;
+          } else {
+            indicatorClickRevealUntilRef.current = 0; // window expired — stop paying the branch cost every frame
+          }
+        }
+        indicatorRef.current.style.opacity = String(Math.max(scrollFade, clickFade));
       }
 
       /* Scroll-timed text block opacity (imperative — avoids per-frame re-render) */
@@ -1285,6 +1303,11 @@ export default function Section1() {
       };
     }
 
+    function onClick() {
+      if (isMobileRef.current) return;
+      indicatorClickRevealUntilRef.current = clock.getElapsedTime() + 3;
+    }
+
     function onResize() {
       const w = window.innerWidth, h = window.innerHeight;
       camera.aspect = w / h;
@@ -1307,6 +1330,7 @@ export default function Section1() {
     window.addEventListener('mousemove',  onMouse);
     window.addEventListener('touchmove',  onTouch, { passive: true });
     window.addEventListener('deviceorientation', onDeviceOrientation);
+    window.addEventListener('click',      onClick);
     window.addEventListener('resize',     onResize);
 
     return () => {
@@ -1315,6 +1339,7 @@ export default function Section1() {
       window.removeEventListener('mousemove', onMouse);
       window.removeEventListener('touchmove', onTouch);
       window.removeEventListener('deviceorientation', onDeviceOrientation);
+      window.removeEventListener('click',     onClick);
       window.removeEventListener('resize',    onResize);
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
       renderer.dispose();
