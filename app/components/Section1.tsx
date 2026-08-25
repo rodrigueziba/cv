@@ -14,7 +14,7 @@
  *  80 – 100% │ Rotated 90° — flow appears to rise bottom → top
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -385,6 +385,7 @@ export default function Section1() {
   // across server/client, unlike isMobile itself) is safe and needs no
   // mount-effect sync.
   const [mobileGateOpen, setMobileGateOpen] = useState(true);
+  const [titleFitScale, setTitleFitScale] = useState(1);
   const sphereButtonElRef = useRef<HTMLButtonElement>(null);
 
   const [titleVisible, setTitleVisible] = useState(true);
@@ -394,6 +395,25 @@ export default function Section1() {
   // of the current one (same stale-closure concern colorsRef/audioSourceModeRef
   // above exist to avoid). Kept in sync at every setTitleVisible call site.
   const titleVisibleRef = useRef(true);
+
+  useLayoutEffect(() => {
+    if (!isMobile) return;
+    function measure() {
+      const el = titleRef.current;
+      if (!el) return;
+      const availablePx = window.innerWidth * 0.9; // 5% margin each side
+      const naturalPx = el.scrollWidth; // unaffected by any transform:scale() already applied — see the identical technique used for ScrollTextBlocks
+      if (naturalPx <= 0) return;
+      setTitleFitScale(Math.max(0.3, Math.min(1, availablePx / naturalPx)));
+    }
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('orientationchange', measure);
+    };
+  }, [isMobile]);
 
   const containerRef  = useRef<HTMLDivElement>(null);
   const mountRef      = useRef<HTMLDivElement>(null);
@@ -1695,7 +1715,7 @@ export default function Section1() {
             position:      'absolute',
             top:           isMobile ? '23%' : TITLE_CONFIG.topPosition,
             left:          '50%',
-            transform:     'translateX(-50%)',
+            transform:     `translateX(-50%) scale(${isMobile ? titleFitScale : 1})`,
             zIndex:        10,
             textAlign:     TITLE_CONFIG.textAlign,
             whiteSpace:    'nowrap',
