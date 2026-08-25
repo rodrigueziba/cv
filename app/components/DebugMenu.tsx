@@ -427,6 +427,31 @@ export default function DebugMenu() {
             {...DEBUG_RANGES.corridorWaveSpeedMultiplier}
           />
         </div>
+
+        <a
+          href="http://ecualizadoresfera.vercel.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'block',
+            width: '100%',
+            marginTop: 14,
+            padding: '8px 8px',
+            borderRadius: 6,
+            border: '1px solid rgba(255,255,255,0.2)',
+            background: 'rgba(255,255,255,0.06)',
+            color: '#f0f0f5',
+            textAlign: 'center',
+            textDecoration: 'none',
+            cursor: 'pointer',
+            fontFamily: michroma,
+            fontSize: 11,
+            letterSpacing: '0.05em',
+            boxSizing: 'border-box',
+          }}
+        >
+          IR AL ECUALIZADOR
+        </a>
       </div>
     </>
   );

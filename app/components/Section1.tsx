@@ -324,11 +324,11 @@ const SPH_FRAG = /* glsl */`
 const CORRIDOR_AUDIO_OVERRIDE_TRACK_INDEX = -1;
 
 const FINGERPRINT_SVG_PATHS = [
-  'M20,82 C20,42 30,16 50,16 C70,16 80,42 80,82',
-  'M28,82 C28,47 36,26 50,26 C64,26 72,47 72,82',
-  'M36,82 C36,52 42,36 50,36 C58,36 64,52 64,82',
-  'M44,82 C44,57 47,46 50,46 C53,46 56,57 56,82',
-  'M50,82 L50,62',
+  'M22,90 C22,45 32,12 50,12 C68,12 78,45 78,90',
+  'M30,90 C30,50 38,22 50,22 C62,22 70,50 70,90',
+  'M38,90 C38,55 44,32 50,32 C56,32 62,55 62,90',
+  'M46,90 C46,60 48,42 50,42 C52,42 54,60 54,90',
+  'M50,90 L50,70',
 ];
 
 /** navigator.vibrate is Android-only — iOS Safari has no implementation
@@ -1632,7 +1632,7 @@ export default function Section1() {
             }}
             className="sphereControlBtn"
           >
-            <svg viewBox="0 0 100 100" width="100%" height="100%" style={{ filter: 'drop-shadow(1.5px 1.5px 0 rgba(0,0,0,0.85))' }}>
+            <svg viewBox="0 0 100 100" width="100%" height="100%" style={{ filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.9)) drop-shadow(1.5px 1.5px 0 rgba(0,0,0,0.85))' }}>
               {FINGERPRINT_SVG_PATHS.map((d, i) => (
                 <path key={i} d={d} stroke="#ffffff" strokeWidth={5} strokeLinecap="round" fill="none" />
               ))}
