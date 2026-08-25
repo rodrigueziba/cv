@@ -331,6 +331,14 @@ const FINGERPRINT_SVG_PATHS = [
   'M50,82 L50,62',
 ];
 
+/** navigator.vibrate is Android-only — iOS Safari has no implementation
+ * and silently does nothing when called, which is the desired graceful
+ * degradation (no feature-detection branch needed beyond the existence
+ * check itself). */
+function vibrateLightly(ms = 15) {
+  navigator.vibrate?.(ms);
+}
+
 export default function Section1() {
   const {
     colors,
@@ -466,6 +474,11 @@ export default function Section1() {
   // ramped/released every frame in animate() (Task 14).
   const lowpassContactRef  = useRef(0);
   const highpassContactRef = useRef(0);
+
+  // Track previous frame's contact state to detect rising edge (first contact only)
+  // for haptic feedback on mobile (Task 7).
+  const wasInRedRayRef = useRef(false);
+  const wasInAmberRayRef = useRef(false);
 
   // Floor doppler wave-compression state (Task 15) — decaying intensity
   // driven by sphere speed, stepped every frame in animate().
@@ -1206,12 +1219,16 @@ export default function Section1() {
       const svAtSphere = sphere.position.z - 0.55 * sphere.position.x + 1.0;
 
       const inRedRay = Math.abs(svAtSphere) < DIAGONAL_RAYS_CONFIG.contactWidth;
+      if (isMobileRef.current && inRedRay && !wasInRedRayRef.current) vibrateLightly();
+      wasInRedRayRef.current = inRedRay;
       lowpassContactRef.current = stepContactAmount(
         lowpassContactRef.current, inRedRay, dt, AUDIO_CONFIG.filterRampSeconds, AUDIO_CONFIG.filterReleaseSeconds
       );
       audioEngineRef.current?.setLowpassAmount(lowpassContactRef.current);
 
       const inAmberRay = Math.abs(svAtSphere + DIAGONAL_RAYS_CONFIG.secondaryOffset) < DIAGONAL_RAYS_CONFIG.contactWidth;
+      if (isMobileRef.current && inAmberRay && !wasInAmberRayRef.current) vibrateLightly();
+      wasInAmberRayRef.current = inAmberRay;
       highpassContactRef.current = stepContactAmount(
         highpassContactRef.current, inAmberRay, dt, AUDIO_CONFIG.filterRampSeconds, AUDIO_CONFIG.filterReleaseSeconds
       );
@@ -1546,10 +1563,12 @@ export default function Section1() {
   }, [isPlaying]);
 
   function handleSphereControlPress() {
+    vibrateLightly();
     sphereControlHeldRef.current = true;
     requestMotionPermissionIfNeeded();
   }
   function handleSphereControlRelease() {
+    vibrateLightly();
     sphereControlHeldRef.current = false;
   }
 
