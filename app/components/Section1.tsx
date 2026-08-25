@@ -585,13 +585,14 @@ export default function Section1() {
     const container = containerRef.current;
     const W = window.innerWidth;
     const H = window.innerHeight;
-    // Computed once here (this effect has [] deps, so it never re-runs) from
-    // the closed-over `isMobile` — safe because the platform doesn't change
-    // mid-session, unlike other isMobile reads in this effect that must use
-    // isMobileRef.current instead (see isMobileRef's doc comment above) to
-    // avoid the SSR-hydration stale-closure issue. This value itself is just
-    // a plain array read once and never needs correcting afterward.
-    const corridorTextBlocks = getCorridorTextBlocks(isMobile);
+    // Computed once here (this effect has [] deps, so it never re-runs).
+    // Reads isMobileRef (not the closed-over `isMobile`) — see isMobileRef's
+    // doc comment above: on first client render isMobile is forced to false
+    // to match SSR, then corrected on a later render after this closure has
+    // already captured its variables. Reading the stale closed-over value
+    // would silently pick the wrong platform's corridor blocks whenever
+    // content/textBlocks.json's pc/mobile corridorBlocks arrays diverge.
+    const corridorTextBlocks = getCorridorTextBlocks(isMobileRef.current);
 
     // If the default /audio.mp3 fails to load, fall back to the pure tone —
     // per the "en default, intenta reproducir el audio.mp3, sino el tono puro" spec.
