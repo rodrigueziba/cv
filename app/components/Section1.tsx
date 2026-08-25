@@ -37,7 +37,7 @@ import {
   SPACE_PROMPT_CONFIG,
   TITLE_HIDE_TRIGGER_INSTANCE,
   FREE_CAMERA_CONFIG,
-  CORRIDOR_TEXT_BLOCKS,
+  getCorridorTextBlocks,
   CORRIDOR_TEXT_BLOCK_SEGMENTS,
   TEXT_BLOCK_DURATION_INSTANCES,
   MOBILE_CONFIG,
@@ -585,6 +585,13 @@ export default function Section1() {
     const container = containerRef.current;
     const W = window.innerWidth;
     const H = window.innerHeight;
+    // Computed once here (this effect has [] deps, so it never re-runs) from
+    // the closed-over `isMobile` — safe because the platform doesn't change
+    // mid-session, unlike other isMobile reads in this effect that must use
+    // isMobileRef.current instead (see isMobileRef's doc comment above) to
+    // avoid the SSR-hydration stale-closure issue. This value itself is just
+    // a plain array read once and never needs correcting afterward.
+    const corridorTextBlocks = getCorridorTextBlocks(isMobile);
 
     // If the default /audio.mp3 fails to load, fall back to the pure tone —
     // per the "en default, intenta reproducir el audio.mp3, sino el tono puro" spec.
@@ -1121,7 +1128,7 @@ export default function Section1() {
         const segmentLength = corridor.length / CORRIDOR_TEXT_BLOCK_SEGMENTS;
         const camForward = new THREE.Vector3();
         camera.getWorldDirection(camForward);
-        CORRIDOR_TEXT_BLOCKS.forEach((_text, i) => {
+        corridorTextBlocks.forEach((_text, i) => {
           const el = corridorTextRefs.current[i];
           if (!el) return;
           const blockLocalZ = -(i + 0.5) * segmentLength;
@@ -1666,8 +1673,8 @@ export default function Section1() {
           {CORRIDOR_CONFIG.finalLinkText}
         </a>
 
-        {/* ── Corridor floating text blocks — see CORRIDOR_TEXT_BLOCKS in sceneConfig.ts ── */}
-        {CORRIDOR_TEXT_BLOCKS.map((text, i) => (
+        {/* ── Corridor floating text blocks — see content/textBlocks.json (getCorridorTextBlocks in sceneConfig.ts) ── */}
+        {getCorridorTextBlocks(isMobile).map((text, i) => (
           <div
             key={`corridor-text-${i}`}
             ref={(el) => {

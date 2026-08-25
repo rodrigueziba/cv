@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useLayoutEffect, useRef, useState } from 'react';
-import { TEXT_BLOCKS, MOBILE_CONFIG, shadowToCss } from '@/app/lib/sceneConfig';
+import { TEXT_BLOCKS, MOBILE_CONFIG, shadowToCss, getTextBlockLines } from '@/app/lib/sceneConfig';
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
 import { useIsMobile } from '@/app/lib/mobileDetect';
 
@@ -157,7 +157,7 @@ const ScrollTextBlocks = forwardRef<HTMLDivElement[], object>(function ScrollTex
                   ...textStyle,
                 }}
               >
-                {block.lines.map((line, li) => (
+                {getTextBlockLines(block.id, isMobile).map((line, li) => (
                   <div key={li}>{line}</div>
                 ))}
               </div>
@@ -191,7 +191,7 @@ const ScrollTextBlocks = forwardRef<HTMLDivElement[], object>(function ScrollTex
               ...textStyle,
             }}
           >
-            {block.lines.map((line, li) => (
+            {getTextBlockLines(block.id, isMobile).map((line, li) => (
               <div key={li}>{line}</div>
             ))}
           </div>

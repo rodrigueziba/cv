@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { TEXT_BLOCKS, TEXT_BLOCK_DURATION_INSTANCES } from './sceneConfig';
+import { TEXT_BLOCKS, TEXT_BLOCK_DURATION_INSTANCES, getTextBlockLines } from './sceneConfig';
 
 describe('sceneConfig text blocks', () => {
-  it('defines exactly 5 blocks, each with 4 lines', () => {
+  it('defines exactly 5 blocks, each with 4 lines (content resolved via getTextBlockLines)', () => {
     expect(TEXT_BLOCKS).toHaveLength(5);
-    TEXT_BLOCKS.forEach((b) => expect(b.lines).toHaveLength(4));
+    TEXT_BLOCKS.forEach((b) => {
+      expect(getTextBlockLines(b.id, false)).toHaveLength(4);
+      expect(getTextBlockLines(b.id, true)).toHaveLength(4);
+    });
   });
 
   it('first block starts after 1 scroll instance', () => {

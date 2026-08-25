@@ -6,6 +6,39 @@
  * ════════════════════════════════════════════════════════════════
  */
 
+import textBlocksContent from '../../content/textBlocks.json';
+
+/* ── TEXT-BLOCK CONTENT (platform-aware, JSON-editable) ────────────
+ * The actual TEXT of the 5 scroll blocks and 4 corridor blocks lives
+ * in content/textBlocks.json — a single, easy-to-find file, editable
+ * without touching TypeScript, with independent `pc`/`mobile` copies.
+ * Everything else (styling/timing/position) stays below in
+ * TEXT_BLOCKS / CORRIDOR_TEXT_BLOCK_SEGMENTS. */
+interface TextBlocksContent {
+  scrollBlocks: Record<string, [string, string, string, string]>;
+  corridorBlocks: string[];
+}
+interface TextBlocksJson {
+  pc: TextBlocksContent;
+  mobile: TextBlocksContent;
+}
+const TEXT_BLOCKS_CONTENT = textBlocksContent as unknown as TextBlocksJson;
+
+/** Looks up a scroll text block's 4 lines from content/textBlocks.json,
+ * for the given platform. Falls back to the 'pc' entry if a block id is
+ * somehow missing from the 'mobile' entry (defensive — keeps the app
+ * from rendering an empty block if the JSON is hand-edited incompletely). */
+export function getTextBlockLines(id: string, isMobile: boolean): [string, string, string, string] {
+  const platform = isMobile ? TEXT_BLOCKS_CONTENT.mobile : TEXT_BLOCKS_CONTENT.pc;
+  return platform.scrollBlocks[id] ?? TEXT_BLOCKS_CONTENT.pc.scrollBlocks[id];
+}
+
+/** Same idea for the 4 corridor floating text blocks. */
+export function getCorridorTextBlocks(isMobile: boolean): string[] {
+  const platform = isMobile ? TEXT_BLOCKS_CONTENT.mobile : TEXT_BLOCKS_CONTENT.pc;
+  return platform.corridorBlocks.length > 0 ? platform.corridorBlocks : TEXT_BLOCKS_CONTENT.pc.corridorBlocks;
+}
+
 /* ── Shared text-shadow shape (used by title + all 5 blocks) ─────── */
 export interface TextShadowConfig {
   colorRgb: string; // e.g. '0,0,0' — no alpha, kept separate so intensity is adjustable
@@ -68,7 +101,6 @@ export const DEFAULT_TEXT_BLOCK_ALIGNMENT: TextBlockAlignment = 'center';
 
 export interface TextBlockConfig {
   id: string;
-  lines: [string, string, string, string];
   startInstance: number;
   fontSizeClamp: string;
   letterSpacing: string;
@@ -83,12 +115,6 @@ export interface TextBlockConfig {
 export const TEXT_BLOCKS: TextBlockConfig[] = [
   {
     id: 'block-1',
-    lines: [
-      'EL EFECTO DOPPLER DESCRIBE',
-      'EL CAMBIO DE FRECUENCIA DE UNA ONDA',
-      'PERCIBIDO POR UN OBSERVADOR',
-      'CUANDO LA FUENTE SE MUEVE',
-    ],
     startInstance: 1,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
     letterSpacing: '0.12em',
@@ -98,12 +124,6 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
   },
   {
     id: 'block-2',
-    lines: [
-      'SI LA FUENTE SE ACERCA,',
-      'LAS ONDAS SE COMPRIMEN',
-      'Y EL SONIDO SE PERCIBE',
-      'MÁS AGUDO',
-    ],
     startInstance: 4,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
     letterSpacing: '0.12em',
@@ -113,12 +133,6 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
   },
   {
     id: 'block-3',
-    lines: [
-      'SI LA FUENTE SE ALEJA,',
-      'LAS ONDAS SE ESPACIAN',
-      'Y EL SONIDO SE PERCIBE',
-      'MÁS GRAVE',
-    ],
     startInstance: 7,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
     letterSpacing: '0.12em',
@@ -128,12 +142,6 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
   },
   {
     id: 'block-4',
-    lines: [
-      'MOVÉ EL MOUSE PARA GUIAR',
-      'LA ESFERA SOBRE EL ESCENARIO',
-      'Y ESCUCHÁ CÓMO CAMBIA',
-      'EL SONIDO EN TIEMPO REAL',
-    ],
     startInstance: 10,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
     letterSpacing: '0.12em',
@@ -143,12 +151,6 @@ export const TEXT_BLOCKS: TextBlockConfig[] = [
   },
   {
     id: 'block-5',
-    lines: [
-      'SEGUÍ SCROLLEANDO',
-      'PARA ENTRAR AL PASILLO',
-      'Y LLEGAR A LA',
-      'SIMULACIÓN COMPLETA',
-    ],
     startInstance: 13,
     fontSizeClamp: 'clamp(14px, 1.6vw, 22px)',
     letterSpacing: '0.12em',
@@ -370,13 +372,6 @@ export const CORRIDOR_CONFIG = {
  * logic also lives in Section1.tsx (it needs the corridor's runtime
  * length, only known once buildCorridor() runs). */
 export const CORRIDOR_TEXT_BLOCK_SEGMENTS = 5; // the corridor's length is divided into this many equal parts
-
-export const CORRIDOR_TEXT_BLOCKS: string[] = [
-  'EL EFECTO DOPPLER NO SÓLO AFECTA A LAS ONDAS ACÚSTICAS',
-  'TAMBIÉN SE DESCUBRIÓ QUE AFECTA A LAS ONDAS VISIBLES COMO LA LUZ',
-  'CUANDO LAS GALAXIAS O ESTRELLAS SE ALEJAN DE NOSOTROS, SU LUZ SE VE ROJA',
-  'Y A MEDIDA QUE SE ACERCAN, SE VEN MÁS AZULES',
-];
 
 /* ── FREE CAMERA (debug menu toggle) ───────────────────────────────
  * WASD + Q/E fly-camera, mouse-look. See Section1.tsx for the
