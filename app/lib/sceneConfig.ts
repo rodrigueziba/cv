@@ -231,7 +231,20 @@ export const COLOR_PALETTE_PRESETS: { name: string; colors: Partial<Record<Scene
 /* ── 6) AUDIO ENGINE ───────────────────────────────────────────────
  * Doppler pitch mapping, default source, and arpeggio chord tables. */
 export const AUDIO_CONFIG = {
+  /** The 3-track default playlist — played consecutively, looping back to
+   * the first after the third. `defaultMp3Path` is kept as an alias to
+   * playlistPaths[0] since a few other places (basePath tests, the debug
+   * menu's "no custom file uploaded" hint text) already reference it by
+   * that name. */
   defaultMp3Path: '/audio.mp3',
+  playlistPaths: ['/audio.mp3', '/audio2.mp3', '/audio3.mp3'],
+  /** Which playlist index mobile sessions start on (audio3.mp3) instead
+   * of index 0 (audio.mp3, the desktop default). */
+  mobileDefaultTrackIndex: 2,
+  /** Forced override track while the sphere is past 50% of the corridor —
+   * see CORRIDOR_AUDIO_OVERRIDE_TRACK_INDEX in Section1.tsx for the
+   * sentinel index that selects this path. */
+  corridorOverridePath: '/audio4.mp3',
   defaultToneFrequencyHz: 220,
   toneFrequencyRangeHz: { min: 55, max: 1760 },
 

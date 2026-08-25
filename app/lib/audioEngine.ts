@@ -31,7 +31,10 @@ type PitchPreservingAudio = HTMLAudioElement & {
  * any sound is audible (browser autoplay policy).
  */
 export class AudioEngine {
-  constructor(private onFileSourceError?: () => void) {}
+  constructor(
+    private onFileSourceError?: () => void,
+    private onTrackEnded?: () => void
+  ) {}
 
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -118,7 +121,7 @@ export class AudioEngine {
    */
   setSource(
     mode: AudioSourceMode,
-    opts: { fileUrl?: string | null; toneFrequencyHz?: number; arpeggioMode?: ArpeggioMode } = {}
+    opts: { fileUrl?: string | null; toneFrequencyHz?: number; arpeggioMode?: ArpeggioMode; loop?: boolean } = {}
   ): void {
     const { ctx, lowpass } = this.ensureGraph();
     this.teardownSource();
@@ -126,12 +129,16 @@ export class AudioEngine {
 
     if (mode === 'file') {
       const el = new Audio(opts.fileUrl ?? withBasePath(AUDIO_CONFIG.defaultMp3Path));
-      el.loop = true;
+      el.loop = opts.loop ?? true;
       el.crossOrigin = 'anonymous';
       el.addEventListener('error', () => {
         if (this.audioEl !== el) return; // stale — this source was already torn down/replaced
         console.warn('[AudioEngine] file source failed to load', el.error);
         this.onFileSourceError?.();
+      });
+      el.addEventListener('ended', () => {
+        if (this.audioEl !== el) return; // stale — this source was already torn down/replaced
+        this.onTrackEnded?.();
       });
       // Pitch must move WITH playbackRate for the doppler effect to be audible.
       const pitchPreservingEl = el as PitchPreservingAudio;

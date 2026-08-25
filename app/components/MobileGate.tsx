@@ -1,7 +1,7 @@
 'use client';
 
 import { useSceneControls } from '@/app/lib/SceneControlsContext';
-import { MOBILE_CONFIG } from '@/app/lib/sceneConfig';
+import { MOBILE_CONFIG, AUDIO_CONFIG } from '@/app/lib/sceneConfig';
 import { requestMotionPermissionIfNeeded } from '@/app/lib/motionPermission';
 
 /**
@@ -14,12 +14,13 @@ import { requestMotionPermissionIfNeeded } from '@/app/lib/motionPermission';
  * control).
  */
 export default function MobileGate({ onDismiss }: { onDismiss: () => void }) {
-  const { setAudioSourceMode, setAudioActivated, setIsPlaying } = useSceneControls();
+  const { setAudioSourceMode, setAudioActivated, setIsPlaying, setCurrentTrackIndex } = useSceneControls();
 
   function handleStart() {
     setAudioSourceMode('file');
     setAudioActivated(true);
     setIsPlaying(true);
+    setCurrentTrackIndex(AUDIO_CONFIG.mobileDefaultTrackIndex);
     onDismiss();
     void requestMotionPermissionIfNeeded();
   }

@@ -49,12 +49,13 @@ import {
   corridorBlockStartInstance,
   corridorInstanceFromTravel,
 } from '@/app/lib/scrollTimeline';
-import { useSceneControls } from '@/app/lib/SceneControlsContext';
+import { useSceneControls, type AudioSourceMode, type ArpeggioMode } from '@/app/lib/SceneControlsContext';
 import { useIsMobile } from '@/app/lib/mobileDetect';
 import { remapDeviceTiltToScreenAxes } from '@/app/lib/deviceTilt';
 import MobileGate from '@/app/components/MobileGate';
 import { requestMotionPermissionIfNeeded } from '@/app/lib/motionPermission';
 import { AudioEngine } from '@/app/lib/audioEngine';
+import { withBasePath } from '@/app/lib/basePath';
 import { stepContactAmount, stepFloorDopplerState, type DopplerFloorState } from '@/app/lib/audioMath';
 import { remapSubrange, corridorTravelDistance } from '@/app/lib/finalPhase';
 import { buildCorridor, type CorridorHandle } from '@/app/lib/corridor';
@@ -316,6 +317,12 @@ const SPH_FRAG = /* glsl */`
    COMPONENT
 ═══════════════════════════════════════════════════════════════ */
 
+/** Sentinel `currentTrackIndex` value that selects AUDIO_CONFIG.corridorOverridePath
+ * instead of a playlist entry — used only by the corridor's 50%-crossing audio
+ * override (see the corridor branch of animate() and resolveFileSourceOpts below),
+ * never set by the UI. */
+const CORRIDOR_AUDIO_OVERRIDE_TRACK_INDEX = -1;
+
 const FINGERPRINT_SVG_PATHS = [
   'M20,82 C20,42 30,16 50,16 C70,16 80,42 80,82',
   'M28,82 C28,47 36,26 50,26 C64,26 72,47 72,82',
@@ -329,7 +336,11 @@ export default function Section1() {
     colors,
     audioSourceMode,
     toneFrequencyHz,
+    setToneFrequencyHz,
     arpeggioMode,
+    setArpeggioMode,
+    currentTrackIndex,
+    setCurrentTrackIndex,
     uploadedFileUrl,
     audioActivated,
     setAudioSourceMode,
@@ -471,6 +482,31 @@ export default function Section1() {
     corridorWaveSpeedMultRef.current = corridorWaveSpeedMultiplier;
   }, [corridorWaveSpeedMultiplier]);
 
+  // Corridor 50%-crossing audio override (Task 1) — forces AUDIO_CONFIG.corridorOverridePath
+  // while past halfway down the corridor, then reverts to exactly whatever audio state
+  // (mode + track/frequency/key) was active right before the crossing.
+  const corridorAudioOverrideActiveRef = useRef(false);
+  const corridorAudioSnapshotRef = useRef<{
+    mode: AudioSourceMode;
+    trackIndex: number;
+    toneFrequencyHz: number;
+    arpeggioMode: ArpeggioMode;
+  } | null>(null);
+  // Mirrors — read inside animate()'s []-dep closure, same stale-closure concern
+  // colorsRef/audioSourceModeRef above exist to avoid.
+  const currentTrackIndexRef = useRef(currentTrackIndex);
+  useEffect(() => {
+    currentTrackIndexRef.current = currentTrackIndex;
+  }, [currentTrackIndex]);
+  const toneFrequencyHzRef = useRef(toneFrequencyHz);
+  useEffect(() => {
+    toneFrequencyHzRef.current = toneFrequencyHz;
+  }, [toneFrequencyHz]);
+  const arpeggioModeRef = useRef(arpeggioMode);
+  useEffect(() => {
+    arpeggioModeRef.current = arpeggioMode;
+  }, [arpeggioMode]);
+
   // Debug-only free-fly camera (Task 14) — WASD + Q/E + mouse-look, gated by
   // the debug menu's freeCameraEnabled toggle (Task 15 adds the UI). Mirrored
   // into a ref following the colorsRef pattern since it's read inside
@@ -531,7 +567,12 @@ export default function Section1() {
 
     // If the default /audio.mp3 fails to load, fall back to the pure tone —
     // per the "en default, intenta reproducir el audio.mp3, sino el tono puro" spec.
-    audioEngineRef.current = new AudioEngine(() => setAudioSourceMode('tone'));
+    audioEngineRef.current = new AudioEngine(
+      () => setAudioSourceMode('tone'),
+      // Reads currentTrackIndexRef (not the closed-over currentTrackIndex) — see
+      // its doc comment above for why a direct closure read would be stale here.
+      () => setCurrentTrackIndex((currentTrackIndexRef.current + 1) % AUDIO_CONFIG.playlistPaths.length)
+    );
 
     /* ── Renderer ───────────────────────────────────────────────── */
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -942,6 +983,34 @@ export default function Section1() {
         corridor.patternUniforms.uTime.value = corridorTimeAccumRef.current;
         corridor.endWallUniforms.uColorT.value = corridorTravelT;
         corridor.patternUniforms.uSpherePosZ.value = -travelDistance;
+
+        // Corridor 50%-crossing audio override — force-switches to the dedicated
+        // override track past halfway, then reverts to exactly whatever audio
+        // state (mode + track/frequency/key) was active right before crossing.
+        // Setting the context setters here is what actually reloads the audio
+        // source — the reactive effects further down (resolveFileSourceOpts)
+        // pick up the change on the next render.
+        const pastHalfway = corridorTravelT >= 0.5;
+        if (pastHalfway && !corridorAudioOverrideActiveRef.current) {
+          corridorAudioOverrideActiveRef.current = true;
+          corridorAudioSnapshotRef.current = {
+            mode: audioSourceModeRef.current,
+            trackIndex: currentTrackIndexRef.current,
+            toneFrequencyHz: toneFrequencyHzRef.current,
+            arpeggioMode: arpeggioModeRef.current,
+          };
+          setAudioSourceMode('file');
+          setCurrentTrackIndex(CORRIDOR_AUDIO_OVERRIDE_TRACK_INDEX);
+        } else if (!pastHalfway && corridorAudioOverrideActiveRef.current) {
+          corridorAudioOverrideActiveRef.current = false;
+          const snap = corridorAudioSnapshotRef.current;
+          if (snap) {
+            setAudioSourceMode(snap.mode);
+            if (snap.mode === 'file') setCurrentTrackIndex(snap.trackIndex);
+            else if (snap.mode === 'tone') setToneFrequencyHz(snap.toneFrequencyHz);
+            else setArpeggioMode(snap.arpeggioMode);
+          }
+        }
       }
 
       /* Ground level differs by phase — disc floor is at world y=0,
@@ -1286,6 +1355,9 @@ export default function Section1() {
         setAudioSourceMode('file');
         setAudioActivated(true);
         setIsPlaying(true);
+        // Reads isMobileRef (not the closed-over `isMobile`) — see isMobileRef's
+        // doc comment above for why a direct closure read would be stale here.
+        setCurrentTrackIndex(isMobileRef.current ? AUDIO_CONFIG.mobileDefaultTrackIndex : 0);
       } else {
         setIsPlaying(!isPlayingRef.current);
       }
@@ -1321,17 +1393,32 @@ export default function Section1() {
     cameraRef.current.updateProjectionMatrix();
   }, [cameraFovDeg]);
 
+  /* Resolves the { fileUrl, loop } opts for setSource('file', ...): a custom
+   * upload always wins and loops on its own; the corridor's 50%-crossing
+   * override sentinel selects the dedicated override track (also looping);
+   * otherwise the current playlist entry plays once (loop: false) so its
+   * 'ended' event (see audioEngine.ts) advances to the next track. */
+  function resolveFileSourceOpts(): { fileUrl: string; loop: boolean } {
+    if (uploadedFileUrl) return { fileUrl: uploadedFileUrl, loop: true };
+    if (currentTrackIndex === CORRIDOR_AUDIO_OVERRIDE_TRACK_INDEX) {
+      return { fileUrl: withBasePath(AUDIO_CONFIG.corridorOverridePath), loop: true };
+    }
+    return { fileUrl: withBasePath(AUDIO_CONFIG.playlistPaths[currentTrackIndex]), loop: false };
+  }
+
   /* Rebuild the source graph on an actual mode switch — expensive (tears
    * down and recreates the oscillator/audio element), audible click is
-   * expected here. */
+   * expected here. Also reacts to currentTrackIndex, since switching tracks
+   * while already in file mode (debug-menu skip, playlist auto-advance, or
+   * the corridor override engaging/reverting) must reload the source too. */
   useEffect(() => {
     audioEngineRef.current?.setSource(audioSourceMode, {
-      fileUrl: uploadedFileUrl,
+      ...resolveFileSourceOpts(),
       toneFrequencyHz,
       arpeggioMode,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioSourceMode]);
+  }, [audioSourceMode, currentTrackIndex]);
 
   /* Rebuild the source graph when the uploaded file changes — but ONLY while
    * already in 'file' mode. Uploading a file while in tone/arpeggio mode
@@ -1340,7 +1427,8 @@ export default function Section1() {
    * effect above already handles. */
   useEffect(() => {
     if (audioSourceModeRef.current !== 'file') return;
-    audioEngineRef.current?.setSource('file', { fileUrl: uploadedFileUrl });
+    audioEngineRef.current?.setSource('file', resolveFileSourceOpts());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadedFileUrl]);
 
   /* Cheap live-parameter updates (e.g. dragging the frequency slider) that

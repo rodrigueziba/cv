@@ -17,6 +17,14 @@ interface SceneControlsValue {
   setToneFrequencyHz: (hz: number) => void;
   arpeggioMode: ArpeggioMode;
   setArpeggioMode: (mode: ArpeggioMode) => void;
+  /** Index into AUDIO_CONFIG.playlistPaths for the currently-selected
+   * bundled track (ignored when uploadedFileUrl is set — a custom upload
+   * always takes precedence and loops on its own). A special sentinel
+   * value, CORRIDOR_AUDIO_OVERRIDE_TRACK_INDEX (see Section1.tsx), selects
+   * AUDIO_CONFIG.corridorOverridePath instead of a playlist entry — used
+   * only by the corridor's 50%-crossing override, never set by the UI. */
+  currentTrackIndex: number;
+  setCurrentTrackIndex: (i: number) => void;
   /** Object URL of a user-uploaded mp3, or null to use the default /audio.mp3 */
   uploadedFileUrl: string | null;
   setUploadedFile: (file: File | null) => void;
@@ -63,6 +71,7 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
   const [audioSourceMode, setAudioSourceMode] = useState<AudioSourceMode>('tone');
   const [toneFrequencyHz, setToneFrequencyHz] = useState(220);
   const [arpeggioMode, setArpeggioMode] = useState<ArpeggioMode>('minor');
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
   // Mirrors uploadedFileUrl so the unmount-only cleanup effect below can read
   // the latest value without needing uploadedFileUrl in its dependency array.
@@ -125,6 +134,8 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
       setToneFrequencyHz,
       arpeggioMode,
       setArpeggioMode,
+      currentTrackIndex,
+      setCurrentTrackIndex,
       uploadedFileUrl,
       setUploadedFile,
       audioActivated,
@@ -159,6 +170,7 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
       audioSourceMode,
       toneFrequencyHz,
       arpeggioMode,
+      currentTrackIndex,
       uploadedFileUrl,
       audioActivated,
       isPlaying,

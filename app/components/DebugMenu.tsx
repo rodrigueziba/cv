@@ -85,6 +85,9 @@ export default function DebugMenu() {
     setToneFrequencyHz,
     arpeggioMode,
     setArpeggioMode,
+    currentTrackIndex,
+    setCurrentTrackIndex,
+    uploadedFileUrl,
     setUploadedFile,
     isPlaying,
     setIsPlaying,
@@ -314,6 +317,27 @@ export default function DebugMenu() {
           >
             {isPlaying ? '⏸ PAUSAR' : '▶ REPRODUCIR'}
           </button>
+
+          {audioSourceMode === 'file' && !uploadedFileUrl && (
+            <button
+              onClick={() => setCurrentTrackIndex((currentTrackIndex + 1) % AUDIO_CONFIG.playlistPaths.length)}
+              style={{
+                width: '100%',
+                marginTop: 4,
+                padding: '6px 8px',
+                borderRadius: 6,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.06)',
+                color: '#f0f0f5',
+                cursor: 'pointer',
+                fontFamily: michroma,
+                fontSize: 11,
+                letterSpacing: '0.05em',
+              }}
+            >
+              ⏭ SIGUIENTE CANCIÓN
+            </button>
+          )}
         </div>
 
         <div style={{ marginBottom: 14 }}>
