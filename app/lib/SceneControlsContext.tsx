@@ -1,7 +1,14 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { DEFAULT_SCENE_COLORS, DEBUG_RANGES, DEFAULT_TEXT_BLOCK_ALIGNMENT, type SceneColorKey, type TextBlockAlignment } from '@/app/lib/sceneConfig';
+import {
+  DEFAULT_SCENE_COLORS,
+  DEBUG_RANGES,
+  DEFAULT_TEXT_BLOCK_ALIGNMENT,
+  DEFAULT_CORRIDOR_WALL_IMAGE_ENABLED,
+  type SceneColorKey,
+  type TextBlockAlignment,
+} from '@/app/lib/sceneConfig';
 
 export type AudioSourceMode = 'file' | 'tone' | 'arpeggio';
 export type ArpeggioMode = 'minor' | 'major';
@@ -62,6 +69,9 @@ interface SceneControlsValue {
   setFloorDopplerInertiaMultiplier: (v: number) => void;
   corridorWaveSpeedMultiplier: number;
   setCorridorWaveSpeedMultiplier: (v: number) => void;
+
+  corridorWallImageEnabled: boolean;
+  setCorridorWallImageEnabled: (v: boolean) => void;
 }
 
 const SceneControlsContext = createContext<SceneControlsValue | null>(null);
@@ -107,6 +117,7 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
   const [corridorWaveSpeedMultiplier, setCorridorWaveSpeedMultiplier] = useState(
     DEBUG_RANGES.corridorWaveSpeedMultiplier.default
   );
+  const [corridorWallImageEnabled, setCorridorWallImageEnabled] = useState(DEFAULT_CORRIDOR_WALL_IMAGE_ENABLED);
 
   const setUploadedFile = (file: File | null) => {
     if (uploadedFileUrlRef.current) URL.revokeObjectURL(uploadedFileUrlRef.current);
@@ -164,6 +175,8 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
       setFloorDopplerInertiaMultiplier,
       corridorWaveSpeedMultiplier,
       setCorridorWaveSpeedMultiplier,
+      corridorWallImageEnabled,
+      setCorridorWallImageEnabled,
     }),
     [
       colors,
@@ -185,6 +198,7 @@ export function SceneControlsProvider({ children }: { children: ReactNode }) {
       floorDopplerIntensityMultiplier,
       floorDopplerInertiaMultiplier,
       corridorWaveSpeedMultiplier,
+      corridorWallImageEnabled,
     ]
   );
 

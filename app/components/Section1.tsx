@@ -351,6 +351,7 @@ export default function Section1() {
     floorDopplerIntensityMultiplier,
     floorDopplerInertiaMultiplier,
     corridorWaveSpeedMultiplier,
+    corridorWallImageEnabled,
     cameraFovDeg,
     freeCameraEnabled,
     textBlockFontSizeMultiplier,
@@ -502,6 +503,14 @@ export default function Section1() {
   useEffect(() => {
     corridorWaveSpeedMultRef.current = corridorWaveSpeedMultiplier;
   }, [corridorWaveSpeedMultiplier]);
+
+  // Debug-menu opt-out for the tinted pared.jpg end-wall texture (Task 6) —
+  // mirrored into a ref following the same pattern as corridorWaveSpeedMultRef
+  // above, since it's read inside animate()'s []-dep closure.
+  const corridorWallImageEnabledRef = useRef(corridorWallImageEnabled);
+  useEffect(() => {
+    corridorWallImageEnabledRef.current = corridorWallImageEnabled;
+  }, [corridorWallImageEnabled]);
 
   // Corridor 50%-crossing audio override (Task 1) — forces AUDIO_CONFIG.corridorOverridePath
   // while past halfway down the corridor, then reverts to exactly whatever audio state
@@ -1039,6 +1048,8 @@ export default function Section1() {
         corridorTimeAccumRef.current += dt * corridorWaveSpeedMultRef.current;
         corridor.patternUniforms.uTime.value = corridorTimeAccumRef.current;
         corridor.endWallUniforms.uColorT.value = corridorTravelT;
+        corridor.endWallUniforms.uUseImage.value = corridorWallImageEnabledRef.current ? 1 : 0;
+        corridor.endWallUniforms.uImageRevealT.value = THREE.MathUtils.smoothstep(corridorTravelT, 0.47, 0.53);
         corridor.patternUniforms.uSpherePosZ.value = -travelDistance;
 
         // Corridor 50%-crossing audio override — force-switches to the dedicated

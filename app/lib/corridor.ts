@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { HASH_NOISE_FBM_GLSL } from '@/app/lib/shaders/common';
 import { CORRIDOR_CONFIG } from '@/app/lib/sceneConfig';
+import { withBasePath } from '@/app/lib/basePath';
 
 /* Floor / ceiling / side walls: a flow-line pattern (same visual
  * family as the main stage's FLOW_FRAG) for the corridor's full
@@ -131,9 +132,14 @@ const PATTERN_FRAG = /* glsl */ `
   }
 `;
 
-/* End wall: flat color, lerping red → blue as the sphere approaches. */
+/* End wall: flat color, lerping red → blue as the sphere approaches — past
+ * ~50% travel, crossfades to a luminance-tinted pared.jpg (still lerping
+ * the same red → blue) unless the debug menu disables it or the texture
+ * failed to load. */
 const END_WALL_VERT = /* glsl */ `
+  varying vec2 vUv;
   void main() {
+    vUv = uv;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
@@ -142,8 +148,24 @@ const END_WALL_FRAG = /* glsl */ `
   uniform vec3  uColorStart;
   uniform vec3  uColorEnd;
   uniform float uColorT;
+  uniform sampler2D uWallTexture;
+  uniform float uTextureReady;  // 0 until the texture has actually finished loading — see buildCorridor()'s onLoad callback
+  uniform float uUseImage;      // debug-menu toggle, 0 or 1
+  uniform float uImageRevealT;  // 0 before ~47% corridor travel, 1 by ~53% — see Section1.tsx
+  varying vec2  vUv;
   void main() {
-    gl_FragColor = vec4(mix(uColorStart, uColorEnd, uColorT), 1.0);
+    vec3 lerped = mix(uColorStart, uColorEnd, uColorT);
+    // Desaturate the image to pure luminance, then tint entirely by the
+    // SAME lerped color the flat wall already uses — this is what makes
+    // the image "look like the wall's own color" and keep participating
+    // in the red→blue transition, regardless of the source photo's own
+    // colors (which this shader deliberately never lets through).
+    vec3  texColor  = texture2D(uWallTexture, vUv).rgb;
+    float luminance = dot(texColor, vec3(0.299, 0.587, 0.114));
+    vec3  tintedImage = luminance * lerped * 1.6; // *1.6: luminance alone reads darker than the flat fill at the same lerped color; brightens the tinted result back to a comparable perceived brightness
+    float imageBlend = uUseImage * uTextureReady * uImageRevealT;
+    vec3  color = mix(lerped, tintedImage, imageBlend);
+    gl_FragColor = vec4(color, 1.0);
   }
 `;
 
@@ -236,7 +258,27 @@ export function buildCorridor(
     uColorStart: { value: new THREE.Color(wallColorStart) },
     uColorEnd: { value: new THREE.Color(wallColorEnd) },
     uColorT: { value: 0 },
+    uWallTexture: { value: new THREE.Texture() }, // placeholder until the real texture loads below
+    uTextureReady: { value: 0 },
+    uUseImage: { value: 1 },     // driven live from the debug toggle by Section1.tsx every frame — see there
+    uImageRevealT: { value: 0 }, // driven live from corridorTravelT by Section1.tsx every frame
   };
+  new THREE.TextureLoader().load(
+    withBasePath(CORRIDOR_CONFIG.wallImagePath),
+    (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      endWallUniforms.uWallTexture.value = texture;
+      endWallUniforms.uTextureReady.value = 1;
+    },
+    undefined,
+    () => {
+      // Load failed (e.g. the file doesn't exist yet) — uTextureReady
+      // stays 0 forever, so imageBlend is permanently 0 and the wall
+      // renders as the original flat-color lerp, exactly as before this
+      // task. No further action needed; this is the intended degradation.
+      console.warn('[corridor] wall image failed to load — falling back to the flat-color wall');
+    }
+  );
   const endWallMat = new THREE.ShaderMaterial({
     vertexShader: END_WALL_VERT,
     fragmentShader: END_WALL_FRAG,

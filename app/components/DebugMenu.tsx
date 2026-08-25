@@ -111,6 +111,8 @@ export default function DebugMenu() {
     setFloorDopplerInertiaMultiplier,
     corridorWaveSpeedMultiplier,
     setCorridorWaveSpeedMultiplier,
+    corridorWallImageEnabled,
+    setCorridorWallImageEnabled,
   } = useSceneControls();
 
   useEffect(() => {
@@ -232,6 +234,14 @@ export default function DebugMenu() {
               />
             </label>
           ))}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+            <input
+              type="checkbox"
+              checked={corridorWallImageEnabled}
+              onChange={(e) => setCorridorWallImageEnabled(e.target.checked)}
+            />
+            <span>Pasillo — imagen en pared final</span>
+          </label>
         </div>
 
         <div style={{ marginBottom: 14 }}>

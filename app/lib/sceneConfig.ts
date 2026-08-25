@@ -345,6 +345,7 @@ export const CORRIDOR_CONFIG = {
   reactivePortion: 0.5, // first 50% of length reacts to the sphere; the rest is calm/static
   patternColorA: '#3a2a6b', // corridor's own pattern colors (independent of the disc's debug-menu colors)
   patternColorB: '#6b2a55',
+  wallImagePath: '/pared.jpg',
   // End-wall red→blue colors are NOT duplicated here — they live in
   // DEFAULT_SCENE_COLORS.corridorWallStart/End above, the single
   // source of truth the debug menu's color pickers also read/write.
@@ -361,6 +362,10 @@ export const CORRIDOR_CONFIG = {
   chaseDistanceMultiplier: 5, // was 4 — a bit further back, gentler angle
   chaseHeightMultiplier: 1.3, // was 2 — less steep downward pitch onto the sphere
 };
+
+/** Default for the debug-menu "Pasillo — imagen en pared final" toggle —
+ * defaults ON per Design Decision 2. See SceneControlsContext.tsx. */
+export const DEFAULT_CORRIDOR_WALL_IMAGE_ENABLED = true;
 
 /* ── CORRIDOR FLOATING TEXT BLOCKS ─────────────────────────────────
  * 4 short narrative lines that float inside the corridor, centered
