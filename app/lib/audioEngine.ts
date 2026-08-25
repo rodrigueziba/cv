@@ -87,9 +87,10 @@ export class AudioEngine {
   async resume(): Promise<void> {
     const { ctx } = this.ensureGraph();
     if (ctx.state === 'suspended') await ctx.resume();
-    // If setSource('file', ...) ran before the context was resumed, its
-    // el.play() call was rejected with NotAllowedError. Retry it now that
-    // we're (hopefully) inside/after a user gesture.
+    // setSource('file', ...) / setPlaying(true) both skip calling play()
+    // while ctx.state isn't 'running' yet (see their comments) — so once
+    // the context is confirmed running here, this is the actual first
+    // play() attempt for whichever file-mode element is current.
     if (this.playing && this.audioEl && this.audioEl.paused) {
       this.audioEl.play().catch(() => {
         /* still blocked — e.g. browser requires play() itself inside the gesture handler (Safari) */
@@ -148,15 +149,26 @@ export class AudioEngine {
       el.playbackRate = this.pitchEnvelope.rate;
       const node = ctx.createMediaElementSource(el);
       node.connect(lowpass);
-      if (this.playing) el.play().catch((err) => {
-        // NotAllowedError just means resume() hasn't run yet from a user gesture —
-        // resume() retries el.play() itself once it does. Anything else (404,
-        // corrupt file, bad MIME) is a real failure and should surface a
-        // diagnostic instead of going silently mute.
-        if (err?.name !== 'NotAllowedError') {
-          console.warn('[AudioEngine] file source failed to play', err);
-        }
-      });
+      // Only call play() once the context is confirmed running. Calling it
+      // while ctx.state is still 'suspended' lets the <audio> element start
+      // decoding/playing on its own (el.paused becomes false, so the tab's
+      // "playing audio" indicator lights up) while zero samples actually
+      // reach ctx.destination — and because el.paused is already false,
+      // resume()'s own retry-play logic below never fires to correct it,
+      // leaving this specific element permanently silent even after the
+      // context later resumes. Deferring to resume()'s retry (which waits
+      // for ctx.state === 'running' before calling play()) avoids the race.
+      if (this.playing && ctx.state === 'running') {
+        el.play().catch((err) => {
+          // NotAllowedError just means resume() hasn't run yet from a user gesture —
+          // resume() retries el.play() itself once it does. Anything else (404,
+          // corrupt file, bad MIME) is a real failure and should surface a
+          // diagnostic instead of going silently mute.
+          if (err?.name !== 'NotAllowedError') {
+            console.warn('[AudioEngine] file source failed to play', err);
+          }
+        });
+      }
       this.audioEl = el;
       this.mediaSourceNode = node;
       return;
@@ -253,8 +265,11 @@ export class AudioEngine {
     const { ctx } = this.ensureGraph();
     this.masterGain?.gain.setTargetAtTime(playing ? DEFAULT_MASTER_GAIN : 0, ctx.currentTime, 0.12);
     if (this.audioEl) {
-      if (playing) this.audioEl.play().catch(() => {});
-      else this.audioEl.pause();
+      // Same "don't play() before the context is confirmed running" guard
+      // as setSource() above — see its comment. pause() is always safe to
+      // call regardless of context state.
+      if (playing && ctx.state === 'running') this.audioEl.play().catch(() => {});
+      else if (!playing) this.audioEl.pause();
     }
   }
 
